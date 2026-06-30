@@ -8,10 +8,18 @@
 
   <parent>
     <groupId>com.whitehawk.javaformatter</groupId>
-    <artifactId>maven-parent-lib</artifactId>
+    <artifactId>maven-parent</artifactId>
     <version>0-SNAPSHOT</version>
-    <relativePath>../maven-parent-lib/pom.xml</relativePath>
+    <relativePath>../maven-parent/pom.xml</relativePath>
   </parent>
 
-  <artifactId>core</artifactId>
+  <artifactId>maven-parent-lib</artifactId>
+  <packaging>pom</packaging>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+  </dependencies>
 </project>
