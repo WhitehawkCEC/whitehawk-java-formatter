@@ -16,7 +16,7 @@
   <artifactId>app-cli</artifactId>
 
   <properties>
-    <exec.mainClass>com.whitehawk.javaformatter.cli.Main</exec.mainClass>
+    <exec.mainClass>com.whitehawk.javaformatter.app.cli.Main</exec.mainClass>
   </properties>
 
   <dependencies>
