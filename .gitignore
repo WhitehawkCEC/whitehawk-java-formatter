@@ -1,0 +1,33 @@
+# java
+*.jar
+
+# maven
+target/
+target-*/
+
+# node
+node_modules/
+
+# eclipse
+.project
+.settings
+.classpath
+.factorypath
+
+# intellij
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# macosx
+Thumbs.db
+.DS_Store
+
+# linux
+nohup.out
+
+# Local secrets
+.env
+
+.claude/settings.local.json

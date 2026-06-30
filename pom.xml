@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project
+  xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.whitehawk.javaformatter</groupId>
+  <artifactId>java-formatter</artifactId>
+  <version>0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <properties>
+    <github.repo>whitehawkcec/java-formatter</github.repo>
+    <github.url>https://maven.pkg.github.com/${github.repo}</github.url>
+
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <maven.compiler.release>25</maven.compiler.release>
+
+    <!-- maven-install-plugin -->
+    <installAtEnd>true</installAtEnd>
+    <!-- maven-deploy-plugin -->
+    <deployAtEnd>false</deployAtEnd>
+
+    <!-- Allows output directory to be overridden -->
+    <build.dir.name>target</build.dir.name>
+
+    <version.assertj>3.27.3</version.assertj>
+    <version.jspecify>1.0.0</version.jspecify>
+    <version.junit>5.11.4</version.junit>
+  </properties>
+
+  <modules>
+    <module>core</module>
+    <module>app-cli</module>
+  </modules>
+
+  <dependencies>
+    <!-- @NullMarked, @Nullable, and friends -->
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${version.junit}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${version.assertj}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.jspecify</groupId>
+        <artifactId>jspecify</artifactId>
+        <version>${version.jspecify}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <distributionManagement>
+    <repository>
+      <id>github</id>
+      <url>${github.url}</url>
+    </repository>
+  </distributionManagement>
+
+  <build>
+    <directory>${basedir}/${build.dir.name}</directory>
+
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>3.5.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.15.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.10.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>3.1.4</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>3.6.2</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>3.1.4</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>3.5.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.5.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-source-plugin</artifactId>
+          <version>3.4.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.5.5</version>
+          <configuration>
+            <argLine>-Xmx500m</argLine>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.6.3</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>versions-maven-plugin</artifactId>
+          <version>2.21.0</version>
+          <configuration>
+            <generateBackupPoms>false</generateBackupPoms>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <profiles>
+    <!--
+      | Arguments                   | Output |
+      | =========================== | ====== |
+      | -DnewVersion=A              | A      |
+    -->
+    <profile>
+      <id>prepare-release</id>
+      <build>
+        <defaultGoal>versions:set</defaultGoal>
+      </build>
+    </profile>
+
+    <profile>
+      <id>build-release</id>
+      <build>
+        <defaultGoal>clean source:jar verify</defaultGoal>
+      </build>
+    </profile>
+
+    <!-- IDE -->
+    <!-- Change build output to avoid maven CLI conflicting with IDE -->
+    <profile>
+      <id>intellij</id>
+      <activation>
+        <property>
+          <name>idea.maven.embedder.version</name>
+        </property>
+      </activation>
+      <properties>
+        <build.dir.name>target-intellij</build.dir.name>
+      </properties>
+    </profile>
+  </profiles>
+</project>
