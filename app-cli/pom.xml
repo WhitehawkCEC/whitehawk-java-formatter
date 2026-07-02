@@ -30,6 +30,22 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessorPaths combine.children="append">
+            <path>
+              <groupId>io.avaje</groupId>
+              <artifactId>avaje-inject-generator</artifactId>
+              <version>${version.avaje-inject}</version>
+            </path>
+          </annotationProcessorPaths>
+          <annotationProcessorPathsUseDepMgmt>
+            true
+          </annotationProcessorPathsUseDepMgmt>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
