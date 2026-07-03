@@ -14,4 +14,12 @@ public interface TrackedJavaFiles {
   /// The stream is lazy and may hold an open handle to the repository; callers must close it
   /// (e.g. with try-with-resources), as with [java.nio.file.Files#list].
   Stream<Path> list(Path path);
+
+  /// A stream of absolute paths of every `.java` file that git reports as changed in the working
+  /// tree that contains `path`: modified tracked files plus newly-created untracked files, minus
+  /// anything git ignores. Files git reports but that no longer exist (e.g. deletions) are omitted.
+  ///
+  /// The stream is lazy and may hold an open handle to the repository; callers must close it
+  /// (e.g. with try-with-resources), as with [java.nio.file.Files#list].
+  Stream<Path> changed(Path path);
 }

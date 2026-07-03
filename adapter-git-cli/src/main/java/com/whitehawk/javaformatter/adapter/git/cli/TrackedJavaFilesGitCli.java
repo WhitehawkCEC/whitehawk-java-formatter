@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,26 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
     return StreamSupport.stream(records, false)
         .filter(name -> name.endsWith(".java"))
         .map(workTree::resolve)
+        .onClose(() -> finish(process, records, stdout));
+  }
+
+  @Override
+  public Stream<Path> changed(Path path) {
+    // Fails (throwing) when `path` is not inside a work tree, matching a git-library open.
+    Path workTree = Path.of(run(path, "rev-parse", "--show-toplevel"));
+
+    // Run from the work-tree root so names are repo-root-relative and resolve against it.
+    // -m: tracked files modified in the work tree; -o: untracked files;
+    // --exclude-standard: drop anything git ignores.
+    Process process =
+        start(workTree, false, "ls-files", "-z", "-m", "-o", "--exclude-standard");
+    InputStream stdout = new BufferedInputStream(process.getInputStream());
+    NulRecordSpliterator records = new NulRecordSpliterator(stdout);
+    return StreamSupport.stream(records, false)
+        .filter(name -> name.endsWith(".java"))
+        .map(workTree::resolve)
+        // `ls-files -m` also reports deletions; skip anything no longer on disk.
+        .filter(Files::exists)
         .onClose(() -> finish(process, records, stdout));
   }
 

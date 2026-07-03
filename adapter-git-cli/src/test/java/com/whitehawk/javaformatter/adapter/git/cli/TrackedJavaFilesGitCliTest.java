@@ -30,6 +30,27 @@ class TrackedJavaFilesGitCliTest {
     }
   }
 
+  @Test
+  void streamsModifiedAndUntrackedJavaFiles(@TempDir Path repo) throws Exception {
+    git(repo, "init");
+    Files.writeString(repo.resolve("Modified.java"), "class Modified {}");
+    Files.writeString(repo.resolve("Unchanged.java"), "class Unchanged {}");
+    Files.writeString(repo.resolve(".gitignore"), "Ignored.java\n");
+    git(repo, "add", "Modified.java", "Unchanged.java", ".gitignore");
+    git(repo, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "initial");
+
+    Files.writeString(repo.resolve("Modified.java"), "class Modified { int x; }");
+    Files.writeString(repo.resolve("New.java"), "class New {}");
+    Files.writeString(repo.resolve("notes.txt"), "not java");
+    Files.writeString(repo.resolve("Ignored.java"), "class Ignored {}");
+
+    try (Stream<Path> changed = new TrackedJavaFilesGitCli().changed(repo)) {
+      assertThat(changed.map(TrackedJavaFilesGitCliTest::real))
+          .containsExactlyInAnyOrder(
+              real(repo.resolve("Modified.java")), real(repo.resolve("New.java")));
+    }
+  }
+
   private static Path real(Path path) {
     try {
       return path.toRealPath();
