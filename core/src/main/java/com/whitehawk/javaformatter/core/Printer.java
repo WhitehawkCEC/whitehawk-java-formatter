@@ -558,6 +558,33 @@ final class Printer {
     }
   }
 
+  /// Whether the `)` at `closeIndex` closes an annotation's argument list: its matching `(`
+  /// follows an annotation name (`@Name` or `@a.b.Name`).
+  private boolean closesAnnotation(int closeIndex) {
+    int open = matchOpen[closeIndex];
+    if (open < 0) {
+      return false;
+    }
+    int name = indexOfPrevCode(open);
+    if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+      return false;
+    }
+    for (int j = indexOfPrevCode(name); j >= 0; ) {
+      if (tokens.get(j).is("@")) {
+        return true;
+      }
+      if (!tokens.get(j).is(".")) {
+        return false;
+      }
+      int qualifier = indexOfPrevCode(j);
+      if (qualifier < 0 || tokens.get(qualifier).kind() != Kind.IDENT) {
+        return false;
+      }
+      j = indexOfPrevCode(qualifier);
+    }
+    return false;
+  }
+
   /// A `.` that begins a method call: `. name (`.
   private boolean isCallDot(int p) {
     if (!tokens.get(p).is(".")) {
@@ -1403,6 +1430,11 @@ final class Printer {
     // `.call()` on an invocation result (`foo(..)` or `arr[..]`) is a chain wrap point and stays
     // broken; only a `.call()` on a plain name (`FooConfig`) joins.
     if (first.is(".") && (prevLast.is(")") || prevLast.is("]"))) {
+      return false;
+    }
+    // A multiline annotation stays broken from the declaration it annotates: its isolated `)`
+    // closer never pulls the following modifier/type onto its line.
+    if (prevLast.is(")") && closesAnnotation(prevLastIndex)) {
       return false;
     }
     // A case-label or labeled-statement colon keeps its statement on the next line.
