@@ -970,10 +970,11 @@ final class Printer {
   // Emit.
   // ---------------------------------------------------------------------------------------------
 
-  /// Joins each run of soft-broken lines back onto one line when the whole run is a wrapped
-  /// statement (it ends with `;`) that fits within [#MAX_WIDTH]. Runs never cross a forced break,
-  /// a blank line, a statement edge (`;`/`{`/`}`), a case or label colon, an annotation line, or
-  /// a trailing line comment.
+  /// Joins each run of soft-broken lines back onto one line when it fits within [#MAX_WIDTH] and
+  /// the run is either a whole wrapped statement (it ends with `;`) or a statement prefix cut off
+  /// by a forced break (e.g. `var b =` rejoins its chain's first receiver while the chain stays
+  /// broken). Runs never cross a forced break, a blank line, a statement edge (`;`/`{`/`}`), a
+  /// case or label colon, an annotation line, or a trailing line comment.
   private boolean[] computeJoins() {
     boolean[] joinWithPrev = new boolean[lines.size()];
     for (int li = 0; li < lines.size(); ) {
@@ -981,7 +982,9 @@ final class Printer {
       while (end + 1 < lines.size() && joinable(end + 1)) {
         end++;
       }
-      if (end > li && lastToken(end).is(";") && fitsJoined(li, end)) {
+      boolean joinsStatement = lastToken(end).is(";")
+        || end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
+      if (end > li && joinsStatement && fitsJoined(li, end)) {
         for (int j = li + 1; j <= end; j++) {
           joinWithPrev[j] = true;
         }
