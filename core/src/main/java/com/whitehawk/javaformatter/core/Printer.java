@@ -632,8 +632,11 @@ final class Printer {
         return;
       }
       case "<" -> {
-        if ((marks[i] & GENERIC_ANGLE) == 0 && genericFits(i)) {
-          markTypeArguments(i);
+        if ((marks[i] & GENERIC_ANGLE) == 0) {
+          int end = typeArgumentsEnd(i);
+          if (end >= 0) {
+            markTypeArguments(i, end);
+          }
         }
         if ((marks[i] & GENERIC_ANGLE) != 0) {
           top.generic++;
@@ -845,10 +848,12 @@ final class Printer {
 
   // --- generic type-argument disambiguation ---
 
-  private boolean genericFits(int open) {
+  /// Index of the token closing the plausible type-argument list opened at `open`, or -1 when
+  /// the `<` cannot open one.
+  private int typeArgumentsEnd(int open) {
     Token prev = prevCode(open);
     if (prev == null) {
-      return false;
+      return -1;
     }
     boolean plausiblePrev = prev.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(prev.text())
       || prev.is(".") || prev.is(",") || prev.is("(") || prev.is("<") || prev.is("{")
@@ -861,21 +866,22 @@ final class Printer {
       || prev.is("interface") || prev.is("record")
       || prev.is(";") || prev.is("{") || prev.is("}");
     if (!plausiblePrev) {
-      return false;
+      return -1;
     }
     int end = scanTypeArguments(open);
     if (end < 0) {
-      return false;
+      return -1;
     }
     Token follower = nextCode(end);
     if (follower == null) {
-      return true;
+      return end;
     }
-    return follower.kind() == Kind.IDENT
+    boolean plausibleFollower = follower.kind() == Kind.IDENT
       || follower.is("(") || follower.is(")") || follower.is(",") || follower.is(".")
       || follower.is("::") || follower.is(";") || follower.is("[") || follower.is("{")
       || follower.is(">") || follower.is(">>") || follower.is(">>>") || follower.is("...")
       || follower.is("&") || follower.is("->") || follower.is("=") || follower.is("@");
+    return plausibleFollower ? end : -1;
   }
 
   /// Returns the index of the token that closes the type-argument list opened at `open`,
@@ -906,8 +912,7 @@ final class Printer {
     return -1;
   }
 
-  private void markTypeArguments(int open) {
-    int end = scanTypeArguments(open);
+  private void markTypeArguments(int open, int end) {
     marks[open] |= GENERIC_ANGLE;
     for (int i = open + 1; i <= end; i++) {
       Token t = tokens.get(i);
