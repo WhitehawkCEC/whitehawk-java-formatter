@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "release": "git pull && commit-and-tag-version"
+  },
+  "devDependencies": {
+    "commit-and-tag-version": "^12.5.1"
+  },
+  "packageManager": "pnpm@10.14.0"
+}
