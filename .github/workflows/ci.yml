@@ -7,11 +7,13 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -33,3 +35,24 @@ jobs:
         run: ./mvnw --batch-mode source:jar deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  native-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: '25'
+          cache: maven
+
+      # Tests already run in the build job.
+      - name: Build native image
+        run: ./mvnw --batch-mode -Pnative -DskipTests -pl app-cli -am package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wh-java-formatter-linux-amd64
+          path: app-cli/target/wh-java-formatter
+          if-no-files-found: error
