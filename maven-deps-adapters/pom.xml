@@ -23,7 +23,7 @@
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>adapter-eclipse-jgit</artifactId>
+      <artifactId>adapter-git-cli</artifactId>
     </dependency>
   </dependencies>
 </project>
