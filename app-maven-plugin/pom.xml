@@ -51,7 +51,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-plugin-plugin</artifactId>
         <configuration>
-          <goalPrefix>javaformatter</goalPrefix>
+          <goalPrefix>wh-java-formatter</goalPrefix>
         </configuration>
       </plugin>
     </plugins>
