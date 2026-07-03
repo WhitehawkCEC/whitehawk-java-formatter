@@ -3,9 +3,10 @@ package com.whitehawk.javaformatter.core;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /// Lexes Java source into a flat token stream, preserving comments and the number of line
 /// terminators between tokens. Never rejects input: unknown characters become single-char
@@ -23,10 +24,10 @@ public final class JavaLexer {
     PUNCT,
   }
 
-  /// @param start offset of the first character in the source
-  /// @param end offset just past the last character
+  /// @param start          offset of the first character in the source
+  /// @param end            offset just past the last character
   /// @param newlinesBefore line terminators between the previous token and this one
-  /// @param atColumn0 token starts at the very beginning of its line
+  /// @param atColumn0      token starts at the very beginning of its line
   public record Token(Kind kind, String text, int start, int end, int newlinesBefore, boolean atColumn0) {
     public boolean is(String s) {
       return text.equals(s);
@@ -64,20 +65,12 @@ public final class JavaLexer {
   private int newlines;
   private boolean atLineStart = true;
 
-  private JavaLexer(String src) {
+  public JavaLexer(String src) {
     this.src = src;
   }
 
-  public static List<Token> lex(String source) {
-    JavaLexer lexer = new JavaLexer(source);
-    List<Token> tokens = new ArrayList<>();
-    while (true) {
-      Token token = lexer.next();
-      if (token == null) {
-        return tokens;
-      }
-      tokens.add(token);
-    }
+  public Stream<Token> stream() {
+    return Stream.generate(this::next).takeWhile(Objects::nonNull);
   }
 
   private @Nullable Token next() {

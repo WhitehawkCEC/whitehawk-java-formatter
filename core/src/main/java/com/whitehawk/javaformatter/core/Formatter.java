@@ -12,7 +12,7 @@ import java.util.List;
 @NullMarked
 public final class Formatter {
   public String format(String source) {
-    List<Token> tokens = JavaLexer.lex(source);
+    List<Token> tokens = new JavaLexer(source).stream().toList();
     if (tokens.isEmpty()) {
       return "";
     }
