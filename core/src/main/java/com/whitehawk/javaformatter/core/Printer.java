@@ -278,6 +278,15 @@ final class Printer {
     }
 
     forceChainBreaks(close);
+
+    // Canonical style never breaks before a method declaration's `throws` clause: join it to the
+    // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
+    // preceding token is a line comment, which would otherwise swallow the rest of the line.
+    for (int i = 1; i < n; i++) {
+      if (tokens.get(i).is("throws") && tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
+        breakBefore[i] = false;
+      }
+    }
   }
 
   /// Breaks before every `.name(` call in each method chain that spans more than one input line.
