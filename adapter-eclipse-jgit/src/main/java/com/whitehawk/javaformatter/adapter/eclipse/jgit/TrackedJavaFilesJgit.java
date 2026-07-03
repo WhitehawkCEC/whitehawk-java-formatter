@@ -12,30 +12,31 @@ import org.jspecify.annotations.NullMarked;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /// [TrackedJavaFiles] backed by JGit's index (`DirCache`).
 @Singleton
 @NullMarked
 public final class TrackedJavaFilesJgit implements TrackedJavaFiles {
   @Override
-  public List<Path> list(Path path) {
+  public Stream<Path> list(Path path) {
+    // The index is read fully into memory here, so the repository can be closed before the
+    // (lazy) stream is consumed -- iterating DirCacheEntry needs no open repository.
+    DirCache index;
+    Path workTree;
     try (Git git = Git.open(path.toFile())) {
       Repository repository = git.getRepository();
-      Path workTree = repository.getWorkTree().toPath();
-      DirCache index = repository.readDirCache();
-
-      List<Path> files = new ArrayList<>();
-      for (int i = 0; i < index.getEntryCount(); i++) {
-        DirCacheEntry entry = index.getEntry(i);
-        if (entry.getPathString().endsWith(".java")) {
-          files.add(workTree.resolve(entry.getPathString()));
-        }
-      }
-      return List.copyOf(files);
+      workTree = repository.getWorkTree().toPath();
+      index = repository.readDirCache();
     } catch (IOException e) {
       throw new UncheckedIOException("Cannot read git index at " + path, e);
     }
+
+    return IntStream.range(0, index.getEntryCount())
+        .mapToObj(index::getEntry)
+        .map(DirCacheEntry::getPathString)
+        .filter(entryPath -> entryPath.endsWith(".java"))
+        .map(workTree::resolve);
   }
 }
