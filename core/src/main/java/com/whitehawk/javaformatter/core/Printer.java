@@ -792,7 +792,7 @@ final class Printer {
     }
   }
 
-  private Token prevCode(int i) {
+  private @Nullable Token prevCode(int i) {
     int idx = indexOfPrevCode(i);
     return idx < 0 ? null : tokens.get(idx);
   }
@@ -806,7 +806,7 @@ final class Printer {
     return -1;
   }
 
-  private Token nextCode(int i) {
+  private @Nullable Token nextCode(int i) {
     int idx = indexOfNextCode(i);
     return idx < 0 ? null : tokens.get(idx);
   }
