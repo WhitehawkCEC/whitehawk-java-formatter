@@ -743,6 +743,11 @@ final class Printer {
       if (brace < 0 || !tokens.get(brace).is("{")) {
         continue; // not a block header (excludes `return (..)`, `throw (..)`, etc.)
       }
+      // A try-with-resources listing multiple resources (a top-level `;`) keeps each resource on
+      // its own line; only a single-resource header collapses.
+      if (keyword.is("try") && hasTopLevelSemicolon(open, close)) {
+        continue;
+      }
       int li = lineIndexOf(open);
       int start = lines.get(li).firstToken();
       int width = lineIndent[li];
@@ -769,6 +774,23 @@ final class Printer {
       }
     }
     return changed;
+  }
+
+  /// Whether the paren group `open`..`close` holds a `;` directly at its top level (not nested in
+  /// an inner bracket) — a try-with-resources separator between multiple resources.
+  private boolean hasTopLevelSemicolon(int open, int close) {
+    int depth = 0;
+    for (int i = open + 1; i < close; i++) {
+      Token t = tokens.get(i);
+      if (t.is("(") || t.is("[") || t.is("{")) {
+        depth++;
+      } else if (t.is(")") || t.is("]") || t.is("}")) {
+        depth--;
+      } else if (depth == 0 && t.is(";")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Lines partition the tokens in order, so binary search by token index.
