@@ -837,7 +837,7 @@ final class Printer {
           out.append('\n');
         }
       }
-      out.append(" ".repeat(lineIndent[li]));
+      out.repeat(" ", lineIndent[li]);
       for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
         if (i > line.firstToken() && spaceBetween(i - 1, i)) {
           out.append(' ');
