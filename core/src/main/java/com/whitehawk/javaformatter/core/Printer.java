@@ -149,6 +149,7 @@ final class Printer {
     int n = in.size();
     boolean[] wrap = new boolean[n]; // bare param: wrap in `(var ...)`
     boolean[] prefixVar = new boolean[n]; // parenthesized implicit param: prepend `var`
+    boolean any = false;
     for (int a = 0; a < n; a++) {
       if (!in.get(a).is("->")) {
         continue;
@@ -163,11 +164,16 @@ final class Printer {
         if (idents != null) {
           for (int idx : idents) {
             prefixVar[idx] = true;
+            any = true;
           }
         }
       } else if (isBareLambdaParam(in, prev)) {
         wrap[prev] = true;
+        any = true;
       }
+    }
+    if (!any) {
+      return in;
     }
 
     List<Token> out = new ArrayList<>(n);
