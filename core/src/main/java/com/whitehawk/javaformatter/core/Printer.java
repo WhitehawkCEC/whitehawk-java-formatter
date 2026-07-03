@@ -4,6 +4,7 @@ import com.whitehawk.javaformatter.core.JavaLexer.Kind;
 import com.whitehawk.javaformatter.core.JavaLexer.Token;
 
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -97,18 +98,46 @@ final class Printer {
     this.lineIndent = new int[lines.size()];
   }
 
-  /// Canonical style parenthesizes an implicit single lambda parameter and gives it `var`:
-  /// an unparenthesized `x ->` becomes `(var x) ->`. Already-parenthesized parameters and
-  /// switch-arrow labels (`case X ->`) are left untouched.
+  /// Canonical style gives every implicit lambda parameter a `var`: an unparenthesized `x ->`
+  /// becomes `(var x) ->`, and a parenthesized untyped list `(x, y) ->` becomes
+  /// `(var x, var y) ->`. Parameters that already carry a type (or `var`) and switch-arrow labels
+  /// (`case X ->`) are left untouched.
   private static List<Token> expandLambdaParams(List<Token> in) {
-    List<Token> out = new ArrayList<>(in.size());
-    for (int i = 0; i < in.size(); i++) {
+    int n = in.size();
+    boolean[] wrap = new boolean[n]; // bare param: wrap in `(var ...)`
+    boolean[] prefixVar = new boolean[n]; // parenthesized implicit param: prepend `var`
+    for (int a = 0; a < n; a++) {
+      if (!in.get(a).is("->")) {
+        continue;
+      }
+      int prev = prevCodeIndex(in, a);
+      if (prev < 0) {
+        continue;
+      }
+      if (in.get(prev).is(")")) {
+        int open = matchOpenParen(in, prev);
+        List<Integer> idents = open < 0 ? null : implicitParamIdents(in, open, prev);
+        if (idents != null) {
+          for (int idx : idents) {
+            prefixVar[idx] = true;
+          }
+        }
+      } else if (isBareLambdaParam(in, prev)) {
+        wrap[prev] = true;
+      }
+    }
+
+    List<Token> out = new ArrayList<>(n);
+    for (int i = 0; i < n; i++) {
       Token t = in.get(i);
-      if (isBareLambdaParam(in, i)) {
+      if (wrap[i]) {
         out.add(new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0()));
         out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), 0, false));
         out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
         out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
+      } else if (prefixVar[i]) {
+        out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), t.newlinesBefore(), t.atColumn0()));
+        out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
       } else {
         out.add(t);
       }
@@ -140,6 +169,52 @@ final class Printer {
       }
     }
     return true;
+  }
+
+  /// If the parenthesized list `open`..`close` is a non-empty implicit lambda parameter list
+  /// (every element a lone non-keyword identifier, so no explicit type and no `var`), returns
+  /// those identifier indices; otherwise null. Typed lists, existing `var`, empty `()`, and
+  /// record-deconstruction patterns all fail the lone-identifier test.
+  private static @Nullable List<Integer> implicitParamIdents(List<Token> in, int open, int close) {
+    List<Integer> idents = new ArrayList<>();
+    int elementTokens = 0;
+    int lastIdent = -1;
+    for (int i = open + 1; i < close; i++) {
+      Token t = in.get(i);
+      if (t.isComment()) {
+        continue;
+      }
+      if (t.is(",")) {
+        if (elementTokens != 1) {
+          return null;
+        }
+        idents.add(lastIdent);
+        elementTokens = 0;
+        continue;
+      }
+      if (++elementTokens > 1 || t.kind() != Kind.IDENT || JavaLexer.KEYWORDS.contains(t.text())) {
+        return null;
+      }
+      lastIdent = i;
+    }
+    if (elementTokens != 1) {
+      return null;
+    }
+    idents.add(lastIdent);
+    return idents;
+  }
+
+  private static int matchOpenParen(List<Token> in, int close) {
+    int depth = 0;
+    for (int i = close; i >= 0; i--) {
+      Token t = in.get(i);
+      if (t.is(")")) {
+        depth++;
+      } else if (t.is("(") && --depth == 0) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private static int nextCodeIndex(List<Token> in, int i) {
