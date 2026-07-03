@@ -15,8 +15,6 @@ import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/// Runs the generated `format-cases` resources: each case holds an `after.java` in canonical
-/// style and a `before.java` with scrambled whitespace.
 @NullMarked
 class FormatterCasesTest {
   private final Formatter toTest = new Formatter();
