@@ -157,6 +157,7 @@ final class Printer {
     boolean[] wrap = new boolean[n]; // bare param: wrap in `(var ...)`
     boolean[] prefixVar = new boolean[n]; // parenthesized implicit param: prepend `var`
     boolean any = false;
+    int[] parenOpen = null;
     for (int a = 0; a < n; a++) {
       if (!in.get(a).is("->")) {
         continue;
@@ -166,7 +167,10 @@ final class Printer {
         continue;
       }
       if (in.get(prev).is(")")) {
-        int open = matchOpenParen(in, prev);
+        if (parenOpen == null) {
+          parenOpen = matchOpenParens(in);
+        }
+        int open = parenOpen[prev];
         List<Integer> idents = open < 0 ? null : implicitParamIdents(in, open, prev);
         if (idents != null) {
           for (int idx : idents) {
@@ -264,17 +268,23 @@ final class Printer {
     return idents;
   }
 
-  private static int matchOpenParen(List<Token> in, int close) {
+  /// Matching `(` index per `)` in one forward pass (parens only, all a lambda list can nest in);
+  /// -1 at unmatched closers.
+  private static int[] matchOpenParens(List<Token> in) {
+    int n = in.size();
+    int[] open = new int[n];
+    Arrays.fill(open, -1);
+    int[] stack = new int[n];
     int depth = 0;
-    for (int i = close; i >= 0; i--) {
+    for (int i = 0; i < n; i++) {
       Token t = in.get(i);
-      if (t.is(")")) {
-        depth++;
-      } else if (t.is("(") && --depth == 0) {
-        return i;
+      if (t.is("(")) {
+        stack[depth++] = i;
+      } else if (t.is(")") && depth > 0) {
+        open[i] = stack[--depth];
       }
     }
-    return -1;
+    return open;
   }
 
   private static int nextCodeIndex(List<Token> in, int i) {
