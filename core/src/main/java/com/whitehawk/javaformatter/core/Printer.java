@@ -156,13 +156,17 @@ final class Printer {
     if (arrow < 0 || !in.get(arrow).is("->")) {
       return false;
     }
-    // Walk back over a label/qualifier list; a leading `case` marks a switch arrow, not a lambda.
+    // Walk back over a label/qualifier list, including generic and array type tokens so a type
+    // pattern (`case Map<?, ?> map ->`) still reaches its `case`; a leading `case` marks a switch
+    // arrow, not a lambda.
     for (int j = prevCodeIndex(in, i); j >= 0; j = prevCodeIndex(in, j)) {
       Token p = in.get(j);
       if (p.is("case")) {
         return false;
       }
       boolean labelPart = p.is(".") || p.is(",")
+        || p.is("<") || p.is(">") || p.is(">>") || p.is(">>>") || p.is("?") || p.is("&")
+        || p.is("[") || p.is("]") || p.is("extends") || p.is("super")
         || p.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(p.text());
       if (!labelPart) {
         break;
