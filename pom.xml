@@ -82,6 +82,10 @@
           <version>3.5.0</version>
         </plugin>
         <plugin>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>3.6.0</version>
+        </plugin>
+        <plugin>
           <artifactId>maven-source-plugin</artifactId>
           <version>3.4.0</version>
         </plugin>
