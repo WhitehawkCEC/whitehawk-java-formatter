@@ -17,7 +17,8 @@ import java.util.Set;
 /// more than one input line has its opener and closer isolated on their own lines (and each of a
 /// paren group's top-level comma-separated elements then starts its own line), and a method
 /// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
-/// call, and a string concatenation the input broke before a `+` of keeps that break. A line wider
+/// call (and each broken call whose arguments fit collapses back onto its own line), and a string
+/// concatenation the input broke before a `+` of keeps that break. A line wider
 /// than the line limit is wrapped the same way: its last outermost bracket
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
@@ -653,6 +654,14 @@ final class Printer {
       lineIndent = new int[lines.size()];
       analyze(null);
     }
+    // A chain call whose arguments were isolated only because the input crammed the chain onto one
+    // line collapses back once the chain is re-broken, reversing forced isolation a join can't.
+    if (collapseChainCallArguments()) {
+      lines.clear();
+      buildLines();
+      lineIndent = new int[lines.size()];
+      analyze(null);
+    }
     // An isolated control-flow condition paren (`if`/`while`/...) whose whole header fits on one
     // line collapses back, reversing the forced isolation that a soft join cannot cross.
     if (collapseControlFlowHeaders()) {
@@ -745,6 +754,52 @@ final class Printer {
         breakBefore[close] = true;
         forcedBreak[close] = true;
         changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// Collapses the argument paren of a broken method chain's call when the whole call — from its
+  /// `.` through the closing `)` — fits on one line. Canonical chain-breaking re-lays every call
+  /// onto its own line, so an argument list the input happened to wrap rejoins rather than staying
+  /// isolated (`.get(\n  "x"\n)` becomes `.get("x")`). A call whose arguments carry a brace group
+  /// (a block, lambda body, or array initializer) is left broken so that group keeps its own
+  /// lines. Returns whether any break was removed.
+  private boolean collapseChainCallArguments() {
+    boolean changed = false;
+    for (int dot = 0; dot < tokens.size(); dot++) {
+      if (!breakBefore[dot] || !isCallDot(dot)) {
+        continue; // only a call that chain-breaking put on its own line
+      }
+      int name = indexOfNextCode(dot);
+      int open = indexOfNextCode(name);
+      int close = matchClose[open];
+      if (close < open + 2 || !breakBefore[open + 1]) {
+        continue; // empty or already-inline argument list
+      }
+      int li = lineIndexOf(dot);
+      int width = lineIndent[li];
+      boolean blocked = false;
+      for (int i = dot; i <= close; i++) {
+        Token t = tokens.get(i);
+        if (tokenWidth[i] < 0 || i > open && i < close && t.is("{")) {
+          blocked = true; // multiline token, or a brace group that keeps its own lines
+          break;
+        }
+        if (i > dot && spaceBefore[i]) {
+          width++;
+        }
+        width += tokenWidth[i];
+      }
+      if (blocked || width > MAX_WIDTH) {
+        continue;
+      }
+      for (int i = open + 1; i <= close; i++) {
+        if (breakBefore[i]) {
+          breakBefore[i] = false;
+          forcedBreak[i] = false;
+          changed = true;
+        }
       }
     }
     return changed;
