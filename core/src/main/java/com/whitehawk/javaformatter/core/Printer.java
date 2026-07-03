@@ -98,16 +98,40 @@ final class Printer {
   private final boolean[] forcedBreak;
   /// Input line index per token (blank lines ignored), used to decide what "spans multiple lines".
   private final int[] tokenLine;
+  /// Matching-bracket index per token: `matchClose` at each opener, `matchOpen` at each closer;
+  /// -1 elsewhere and at unbalanced brackets.
+  private final int[] matchOpen;
+  private final int[] matchClose;
 
   Printer(List<Token> tokens) {
     this.tokens = expandLambdaParams(tokens);
-    this.marks = new byte[this.tokens.size()];
-    this.breakBefore = new boolean[this.tokens.size()];
-    this.forcedBreak = new boolean[this.tokens.size()];
-    this.tokenLine = new int[this.tokens.size()];
+    int n = this.tokens.size();
+    this.marks = new byte[n];
+    this.breakBefore = new boolean[n];
+    this.forcedBreak = new boolean[n];
+    this.tokenLine = new int[n];
+    this.matchOpen = new int[n];
+    this.matchClose = new int[n];
+    computeBracketMatches();
     computeBreaks();
     buildLines();
     this.lineIndent = new int[lines.size()];
+  }
+
+  private void computeBracketMatches() {
+    Arrays.fill(matchOpen, -1);
+    Arrays.fill(matchClose, -1);
+    Deque<Integer> openers = new ArrayDeque<>();
+    for (int i = 0; i < tokens.size(); i++) {
+      Token t = tokens.get(i);
+      if (t.is("(") || t.is("[") || t.is("{")) {
+        openers.push(i);
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
+        int o = openers.pop();
+        matchClose[o] = i;
+        matchOpen[i] = o;
+      }
+    }
   }
 
   /// Canonical style gives every implicit lambda parameter a `var`: an unparenthesized `x ->`
@@ -264,25 +288,9 @@ final class Printer {
       tokenLine[i] = line;
     }
 
-    int[] close = new int[n];
-    int[] open = new int[n];
-    Arrays.fill(close, -1);
-    Arrays.fill(open, -1);
-    Deque<Integer> openers = new ArrayDeque<>();
-    for (int i = 0; i < n; i++) {
-      Token t = tokens.get(i);
-      if (t.is("(") || t.is("[") || t.is("{")) {
-        openers.push(i);
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
-        int o = openers.pop();
-        close[o] = i;
-        open[i] = o;
-      }
-    }
-
     // A bracket group spanning more than one line isolates its opener and closer.
     for (int o = 0; o < n; o++) {
-      int c = close[o];
+      int c = matchClose[o];
       if (c > o + 1 && tokenLine[o] != tokenLine[c]) {
         breakBefore[o + 1] = true;
         breakBefore[c] = true;
@@ -291,7 +299,7 @@ final class Printer {
       }
     }
 
-    forceChainBreaks(close);
+    forceChainBreaks();
 
     // Canonical style never breaks before a method declaration's `throws` clause: join it to the
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
@@ -304,7 +312,7 @@ final class Printer {
   }
 
   /// Breaks before every `.name(` call in each method chain that spans more than one input line.
-  private void forceChainBreaks(int[] close) {
+  private void forceChainBreaks() {
     int n = tokens.size();
     int[] nextCall = new int[n];
     boolean[] callDot = new boolean[n];
@@ -316,7 +324,7 @@ final class Printer {
       }
       callDot[p] = true;
       int paren = indexOfNextCode(indexOfNextCode(p));
-      int next = indexOfNextCode(close[paren]);
+      int next = indexOfNextCode(matchClose[paren]);
       if (next >= 0 && isCallDot(next)) {
         nextCall[p] = next;
         linked[next] = true;
@@ -334,7 +342,7 @@ final class Printer {
         continue;
       }
       int last = chain.get(chain.size() - 1);
-      int lastClose = close[indexOfNextCode(indexOfNextCode(last))];
+      int lastClose = matchClose[indexOfNextCode(indexOfNextCode(last))];
       if (tokenLine[p] != tokenLine[lastClose]) {
         for (int dot : chain) {
           breakBefore[dot] = true;
@@ -435,18 +443,21 @@ final class Printer {
       Line line = lines.get(li);
       int open = -1;
       int close = -1;
-      Deque<Integer> openers = new ArrayDeque<>();
-      for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
+      int end = line.firstToken() + line.tokenCount();
+      for (int i = line.firstToken(); i < end; i++) {
         Token t = tokens.get(i);
-        if (t.is("(") || t.is("[") || t.is("{")) {
-          openers.push(i);
-        } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
-          int o = openers.pop();
-          if (openers.isEmpty() && i > o + 1) {
-            open = o;
-            close = i;
-          }
+        if (!t.is("(") && !t.is("[") && !t.is("{")) {
+          continue;
         }
+        int c = matchClose[i];
+        if (c < 0 || c >= end) {
+          break; // the rest of the line is nested inside this group
+        }
+        if (c > i + 1) {
+          open = i;
+          close = c;
+        }
+        i = c; // skip the contents: only groups outermost within the line count
       }
       if (open >= 0 && !breakBefore[open + 1]) {
         breakBefore[open + 1] = true;
@@ -804,7 +815,7 @@ final class Printer {
     if (!paren.typeLike || !paren.hasContent) {
       return false;
     }
-    Token beforeOpen = prevCode(matchingOpen(closeIndex));
+    Token beforeOpen = prevCode(matchOpen[closeIndex]);
     // A cast's `(` cannot follow a name or a closing bracket (that would be a call or index).
     if (beforeOpen != null
       && (beforeOpen.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(beforeOpen.text())
@@ -822,22 +833,6 @@ final class Printer {
         || next.kind() == Kind.NUMBER || next.kind() == Kind.STRING || next.kind() == Kind.CHAR
         || next.kind() == Kind.TEXT_BLOCK;
     };
-  }
-
-  private int matchingOpen(int closeIndex) {
-    int depth = 0;
-    for (int i = closeIndex; i >= 0; i--) {
-      Token t = tokens.get(i);
-      if (t.is(")")) {
-        depth++;
-      } else if (t.is("(")) {
-        depth--;
-        if (depth == 0) {
-          return i;
-        }
-      }
-    }
-    return 0;
   }
 
   private boolean isUnaryPosition(int i) {
