@@ -21,8 +21,9 @@ import java.util.Set;
 /// than the line limit is wrapped the same way: its last outermost bracket
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
-/// joined back onto one line when it fits within the line limit. Everything else is recomputed
-/// too:
+/// joined back onto one line when it fits within the line limit. A control-flow body without
+/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. Everything else is
+/// recomputed too:
 /// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
 /// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
 /// newline).
@@ -113,7 +114,7 @@ final class Printer {
   private final boolean[] spaceBefore;
 
   Printer(List<Token> tokens) {
-    this.tokens = expandLambdaParams(tokens);
+    this.tokens = insertMissingBraces(expandLambdaParams(tokens));
     int n = this.tokens.size();
     this.marks = new byte[n];
     this.breakBefore = new boolean[n];
@@ -304,6 +305,179 @@ final class Printer {
       }
     }
     return -1;
+  }
+
+  /// Canonical style braces every control-flow body: a `if`/`else`/`for`/`while`/`do` whose
+  /// controlled statement is not already a block gets a `{` before it and a `}` after it (an
+  /// `else if` keeps its unbraced `if`, and an empty `;` body is left alone). The controlled
+  /// statement is forced onto its own line so the inserted block is isolated by the normal
+  /// multiline-bracket rule.
+  private static List<Token> insertMissingBraces(List<Token> in) {
+    int n = in.size();
+    int[] close = matchAllBrackets(in);
+    List<int[]> wraps = new ArrayList<>(); // {bodyStart, bodyEndInclusive}
+    for (int i = 0; i < n; i++) {
+      Token t = in.get(i);
+      int bodyStart;
+      if (t.is("if") || t.is("while") || t.is("for")) {
+        int paren = nextCodeIndex(in, i);
+        if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+          continue;
+        }
+        bodyStart = nextCodeIndex(in, close[paren]);
+      } else if (t.is("do")) {
+        bodyStart = nextCodeIndex(in, i);
+      } else if (t.is("else")) {
+        bodyStart = nextCodeIndex(in, i);
+        if (bodyStart >= 0 && in.get(bodyStart).is("if")) {
+          continue; // else-if chain keeps its unbraced `if`
+        }
+      } else {
+        continue;
+      }
+      if (bodyStart < 0) {
+        continue;
+      }
+      Token body = in.get(bodyStart);
+      if (body.is("{") || body.is(";")) {
+        continue; // already a block or an empty statement
+      }
+      int bodyEnd = statementEnd(in, close, bodyStart);
+      if (bodyEnd >= bodyStart) {
+        wraps.add(new int[] {bodyStart, bodyEnd});
+      }
+    }
+    if (wraps.isEmpty()) {
+      return in;
+    }
+    return applyWraps(in, wraps);
+  }
+
+  /// Rebuilds the token list with a synthetic `{`/`}` around each wrap's controlled statement.
+  /// Braces opening at the same token nest outermost-first; those closing at the same token nest
+  /// innermost-first.
+  private static List<Token> applyWraps(List<Token> in, List<int[]> wraps) {
+    int n = in.size();
+    List<List<Integer>> openEnds = new ArrayList<>(n);
+    List<List<Integer>> closeStarts = new ArrayList<>(n);
+    for (int i = 0; i < n; i++) {
+      openEnds.add(null);
+      closeStarts.add(null);
+    }
+    for (int[] w : wraps) {
+      if (openEnds.get(w[0]) == null) {
+        openEnds.set(w[0], new ArrayList<>());
+      }
+      openEnds.get(w[0]).add(w[1]);
+      if (closeStarts.get(w[1]) == null) {
+        closeStarts.set(w[1], new ArrayList<>());
+      }
+      closeStarts.get(w[1]).add(w[0]);
+    }
+    List<Token> out = new ArrayList<>(n + 2 * wraps.size());
+    for (int i = 0; i < n; i++) {
+      Token t = in.get(i);
+      List<Integer> opens = openEnds.get(i);
+      if (opens != null) {
+        for (int k = 0; k < opens.size(); k++) {
+          out.add(new Token(Kind.PUNCT, "{", t.start(), t.start(), 0, false));
+        }
+        // The controlled statement starts its own line so the block spans multiple lines.
+        t = new Token(t.kind(), t.text(), t.start(), t.end(), Math.max(1, t.newlinesBefore()), t.atColumn0());
+      }
+      out.add(t);
+      List<Integer> closes = closeStarts.get(i);
+      if (closes != null) {
+        closes.sort(java.util.Comparator.reverseOrder());
+        for (int k = 0; k < closes.size(); k++) {
+          out.add(new Token(Kind.PUNCT, "}", t.end(), t.end(), 1, false));
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Index of the last token of the statement starting at `start` (inclusive): a block ends at its
+  /// `}`; a nested `if`/`for`/`while`/`do` ends at its own controlled statement (and an `if` at its
+  /// `else` branch); everything else ends at the next `;` outside any bracket group.
+  private static int statementEnd(List<Token> in, int[] close, int start) {
+    Token t = in.get(start);
+    if (t.is("{")) {
+      return close[start] < 0 ? scanToSemicolon(in, close, start) : close[start];
+    }
+    if (t.is(";")) {
+      return start;
+    }
+    if (t.is("if") || t.is("while") || t.is("for") || t.is("switch") || t.is("synchronized")) {
+      int paren = nextCodeIndex(in, start);
+      if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+        return scanToSemicolon(in, close, start);
+      }
+      int body = nextCodeIndex(in, close[paren]);
+      if (body < 0) {
+        return close[paren];
+      }
+      int end = statementEnd(in, close, body);
+      if (t.is("if")) {
+        int els = nextCodeIndex(in, end);
+        if (els >= 0 && in.get(els).is("else")) {
+          int elseBody = nextCodeIndex(in, els);
+          if (elseBody >= 0) {
+            end = statementEnd(in, close, elseBody);
+          }
+        }
+      }
+      return end;
+    }
+    if (t.is("do")) {
+      int body = nextCodeIndex(in, start);
+      if (body < 0) {
+        return start;
+      }
+      int end = statementEnd(in, close, body);
+      int wh = nextCodeIndex(in, end);
+      if (wh >= 0 && in.get(wh).is("while")) {
+        int paren = nextCodeIndex(in, wh);
+        if (paren >= 0 && in.get(paren).is("(") && close[paren] >= 0) {
+          int semi = nextCodeIndex(in, close[paren]);
+          return semi >= 0 && in.get(semi).is(";") ? semi : close[paren];
+        }
+      }
+      return end;
+    }
+    return scanToSemicolon(in, close, start);
+  }
+
+  /// Index of the first `;` at or after `from` that is not nested inside a bracket group, or the
+  /// last token when none is found.
+  private static int scanToSemicolon(List<Token> in, int[] close, int from) {
+    for (int j = from; j < in.size(); j++) {
+      Token t = in.get(j);
+      if ((t.is("(") || t.is("[") || t.is("{")) && close[j] > j) {
+        j = close[j];
+      } else if (t.is(";")) {
+        return j;
+      }
+    }
+    return in.size() - 1;
+  }
+
+  /// Matching closer index per opener (`(`/`[`/`{`); -1 at every other token and at unbalanced
+  /// openers.
+  private static int[] matchAllBrackets(List<Token> in) {
+    int n = in.size();
+    int[] mc = new int[n];
+    Arrays.fill(mc, -1);
+    Deque<Integer> openers = new ArrayDeque<>();
+    for (int i = 0; i < n; i++) {
+      Token t = in.get(i);
+      if (t.is("(") || t.is("[") || t.is("{")) {
+        openers.push(i);
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
+        mc[openers.pop()] = i;
+      }
+    }
+    return mc;
   }
 
   /// Seeds [#breakBefore] from input line terminators, then forces the breaks canonical style
