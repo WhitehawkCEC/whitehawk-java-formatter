@@ -876,7 +876,7 @@ final class Printer {
         String stripped = raw.stripLeading();
         out.append('\n');
         if (stripped.startsWith("*")) {
-          out.append(" ".repeat(indent + 1)).append(stripped.stripTrailing());
+          out.repeat(" ", indent + 1).append(stripped.stripTrailing());
         } else {
           out.append(raw);
         }
