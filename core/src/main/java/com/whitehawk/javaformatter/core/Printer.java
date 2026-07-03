@@ -16,12 +16,15 @@ import java.util.Set;
 /// Renders a token stream back to source. Line breaks are normalized: a bracket group that spans
 /// more than one input line has its opener and closer isolated on their own lines, and a method
 /// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
-/// call. Everything else is recomputed too: indentation, spacing between tokens on a line,
-/// blank-line counts (runs collapse to one; none directly after a `{`/`(` line nor before a
-/// `}`/`)` line), and line endings (LF, single final newline).
+/// call. A wrapped statement whose remaining breaks are all soft (none of the above) is joined
+/// back onto one line when it fits within the line limit. Everything else is recomputed too:
+/// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
+/// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
+/// newline).
 @NullMarked
 final class Printer {
   private static final int INDENT = 2;
+  private static final int MAX_WIDTH = 100;
 
   private static final Set<String> PAREN_KEYWORDS = Set.of(
     "if", "for", "while", "switch", "catch", "synchronized", "try", "return", "throw", "assert", "yield"
@@ -85,6 +88,9 @@ final class Printer {
   private final int[] lineIndent;
   /// True where a line break must precede the token; seeded from input newlines, then normalized.
   private final boolean[] breakBefore;
+  /// True where the break was forced by canonical style (bracket isolation, chain breaks); such
+  /// breaks are never joined away.
+  private final boolean[] forcedBreak;
   /// Input line index per token (blank lines ignored), used to decide what "spans multiple lines".
   private final int[] tokenLine;
 
@@ -92,6 +98,7 @@ final class Printer {
     this.tokens = expandLambdaParams(tokens);
     this.marks = new byte[this.tokens.size()];
     this.breakBefore = new boolean[this.tokens.size()];
+    this.forcedBreak = new boolean[this.tokens.size()];
     this.tokenLine = new int[this.tokens.size()];
     computeBreaks();
     buildLines();
@@ -274,6 +281,8 @@ final class Printer {
       if (c > o + 1 && tokenLine[o] != tokenLine[c]) {
         breakBefore[o + 1] = true;
         breakBefore[c] = true;
+        forcedBreak[o + 1] = true;
+        forcedBreak[c] = true;
       }
     }
 
@@ -324,6 +333,7 @@ final class Printer {
       if (tokenLine[p] != tokenLine[lastClose]) {
         for (int dot : chain) {
           breakBefore[dot] = true;
+          forcedBreak[dot] = true;
         }
       }
     }
@@ -355,7 +365,7 @@ final class Printer {
 
   String print() {
     analyze();
-    return emit();
+    return emit(computeJoins());
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -836,19 +846,97 @@ final class Printer {
   // Emit.
   // ---------------------------------------------------------------------------------------------
 
-  private String emit() {
+  /// Joins each run of soft-broken lines back onto one line when the whole run is a wrapped
+  /// statement (it ends with `;`) that fits within [#MAX_WIDTH]. Runs never cross a forced break,
+  /// a blank line, a statement edge (`;`/`{`/`}`), a case or label colon, an annotation line, or
+  /// a trailing line comment.
+  private boolean[] computeJoins() {
+    boolean[] joinWithPrev = new boolean[lines.size()];
+    for (int li = 0; li < lines.size(); ) {
+      int end = li;
+      while (end + 1 < lines.size() && joinable(end + 1)) {
+        end++;
+      }
+      if (end > li && lastToken(end).is(";") && fitsJoined(li, end)) {
+        for (int j = li + 1; j <= end; j++) {
+          joinWithPrev[j] = true;
+        }
+      }
+      li = end + 1;
+    }
+    return joinWithPrev;
+  }
+
+  /// Whether line `li` may be joined onto the line before it.
+  private boolean joinable(int li) {
+    Line line = lines.get(li);
+    if (line.blanksBefore() > 0 || forcedBreak[line.firstToken()]) {
+      return false;
+    }
+    Token first = tokens.get(line.firstToken());
+    if (first.is("}") || first.is("@")) {
+      return false;
+    }
+    // A wrapped ternary keeps its `?`/`:` branch lines.
+    if (first.is("?") || first.is(":")) {
+      return false;
+    }
+    Line prev = lines.get(li - 1);
+    if (tokens.get(prev.firstToken()).is("@")) {
+      return false;
+    }
+    int prevLastIndex = prev.firstToken() + prev.tokenCount() - 1;
+    Token prevLast = tokens.get(prevLastIndex);
+    if (prevLast.isComment() || prevLast.is(";") || prevLast.is("{") || prevLast.is("}") || prevLast.is(",")) {
+      return false;
+    }
+    // `.call()` on an invocation result (`foo(..)` or `arr[..]`) is a chain wrap point and stays
+    // broken; only a `.call()` on a plain name (`FooConfig`) joins.
+    if (first.is(".") && (prevLast.is(")") || prevLast.is("]"))) {
+      return false;
+    }
+    // A case-label or labeled-statement colon keeps its statement on the next line.
+    return !(prevLast.is(":") && (marks[prevLastIndex] & COLON_NO_SPACE_BEFORE) != 0);
+  }
+
+  private Token lastToken(int li) {
+    Line line = lines.get(li);
+    return tokens.get(line.firstToken() + line.tokenCount() - 1);
+  }
+
+  private boolean fitsJoined(int startLine, int endLine) {
+    int first = lines.get(startLine).firstToken();
+    Line last = lines.get(endLine);
+    int end = last.firstToken() + last.tokenCount();
+    int width = lineIndent[startLine];
+    for (int i = first; i < end; i++) {
+      if (tokens.get(i).text().indexOf('\n') >= 0) {
+        return false; // text block or multiline comment
+      }
+      if (i > first && spaceBetween(i - 1, i)) {
+        width++;
+      }
+      width += tokens.get(i).text().length();
+    }
+    return width <= MAX_WIDTH;
+  }
+
+  private String emit(boolean[] joinWithPrev) {
     StringBuilder out = new StringBuilder();
     for (int li = 0; li < lines.size(); li++) {
       Line line = lines.get(li);
-      if (li > 0) {
+      boolean joined = li > 0 && joinWithPrev[li];
+      if (li > 0 && !joined) {
         out.append('\n');
         if (keepBlank(li)) {
           out.append('\n');
         }
       }
-      out.repeat(" ", lineIndent[li]);
+      if (!joined) {
+        out.repeat(" ", lineIndent[li]);
+      }
       for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-        if (i > line.firstToken() && spaceBetween(i - 1, i)) {
+        if ((i > line.firstToken() || joined) && spaceBetween(i - 1, i)) {
           out.append(' ');
         }
         appendToken(out, i, lineIndent[li]);
