@@ -11,11 +11,18 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # create the GitHub Release + upload the binary
-      packages: write # deploy to GitHub Packages
+  # GraalVM native-image cannot cross-compile, so each target OS/arch builds
+  # its own binary on a matching runner. Binaries are uploaded as workflow
+  # artifacts and collected by the `release` job below.
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: wh-java-formatter-linux-x64,    bin: wh-java-formatter }
+          - { os: macos-latest,  asset: wh-java-formatter-darwin-arm64, bin: wh-java-formatter }
+          - { os: macos-13,      asset: wh-java-formatter-darwin-x64,   bin: wh-java-formatter }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
@@ -30,21 +37,65 @@ jobs:
           key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: maven-${{ runner.os }}-
 
-      # Stamp the reactor with the tag version before building.
+      # Stamp the reactor with the tag version before building (in-memory pom
+      # bump only).
       - name: Set release version
         run: mise exec -- ./mvnw --batch-mode -Pprepare-release -DnewVersion=${{ github.ref_name }}
 
-      # One reactor pass: builds + tests everything, produces the native
-      # binary (app-cli), and deploys every artifact (incl. the maven plugin)
-      # to GitHub Packages. Credentials come from .mvn/settings.xml
-      # (server id `github`, resolved from ${env.GITHUB_ACTOR}/${env.GITHUB_TOKEN}).
-      - name: Build and deploy
-        run: mise exec -- ./mvnw --batch-mode -Pnative source:jar deploy
+      - name: Build native binary
+        run: mise exec -- ./mvnw --batch-mode -Pnative package
+
+      - name: Rename binary
+        shell: bash
+        run: cp app-cli/target/${{ matrix.bin }} ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  # Runs once: deploys the maven artifacts (incl. the maven plugin) to GitHub
+  # Packages and publishes the GitHub Release with every platform binary.
+  release:
+    needs: native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release + upload the binaries
+      packages: write # deploy to GitHub Packages
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jdx/mise-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
+
+      - name: Set release version
+        run: mise exec -- ./mvnw --batch-mode -Pprepare-release -DnewVersion=${{ github.ref_name }}
+
+      # Deploys every artifact (jars + the maven plugin) to GitHub Packages.
+      # Credentials come from .mvn/settings.xml (server id `github`, resolved
+      # from ${env.GITHUB_ACTOR}/${env.GITHUB_TOKEN}). No -Pnative here: the
+      # binaries were already built in the `native` job.
+      - name: Deploy to GitHub Packages
+        run: mise exec -- ./mvnw --batch-mode source:jar deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: app-cli/target/wh-java-formatter
+          files: dist/wh-java-formatter-*
           fail_on_unmatched_files: true
