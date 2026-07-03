@@ -1137,9 +1137,14 @@ final class Printer {
       while (end + 1 < lines.size() && joinable(end + 1)) {
         end++;
       }
-      boolean joinsStatement = lastToken(end).is(";")
-        || end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
-      if (end > li && joinsStatement && fitsJoined(li, end)) {
+      boolean endForced = end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
+      boolean joinsStatement = lastToken(end).is(";") || endForced;
+      // A chain receiver stays on the assignment head line even when the join overflows: breaking
+      // after `=` gains nothing since the receiver cannot wrap, and canonical style keeps it there.
+      boolean chainHead = endForced
+        && tokens.get(lines.get(end + 1).firstToken()).is(".")
+        && !hasMultilineToken(li, end);
+      if (end > li && joinsStatement && (fitsJoined(li, end) || chainHead)) {
         for (int j = li + 1; j <= end; j++) {
           joinWithPrev[j] = true;
         }
@@ -1188,6 +1193,20 @@ final class Printer {
   private Token lastToken(int li) {
     Line line = lines.get(li);
     return tokens.get(line.firstToken() + line.tokenCount() - 1);
+  }
+
+  /// Whether the token run spanning lines `startLine`..`endLine` holds a token that renders across
+  /// multiple lines (text block, block comment), which must never be joined onto a prior line.
+  private boolean hasMultilineToken(int startLine, int endLine) {
+    int first = lines.get(startLine).firstToken();
+    Line last = lines.get(endLine);
+    int end = last.firstToken() + last.tokenCount();
+    for (int i = first; i < end; i++) {
+      if (tokenWidth[i] < 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private boolean fitsJoined(int startLine, int endLine) {
