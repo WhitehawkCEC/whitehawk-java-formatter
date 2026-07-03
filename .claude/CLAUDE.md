@@ -4,6 +4,10 @@ Be terse and concise.
 
 All files: `@NullMarked`
 
+## maven
+
+Never run: `./mvnw install`
+
 ## git
 
 Pick the conventional-commit type by external-API impact, not by intent:
