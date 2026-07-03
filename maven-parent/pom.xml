@@ -93,6 +93,11 @@
       </dependency>
       <dependency>
         <groupId>${project.groupId}</groupId>
+        <artifactId>adapter-git-cli</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${project.groupId}</groupId>
         <artifactId>maven-deps-adapters</artifactId>
         <version>${project.version}</version>
         <type>pom</type>

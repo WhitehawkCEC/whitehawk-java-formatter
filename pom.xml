@@ -32,6 +32,7 @@
     <module>maven-parent-lib</module>
     <module>core</module>
     <module>adapter-eclipse-jgit</module>
+    <module>adapter-git-cli</module>
     <module>maven-deps-adapters</module>
     <module>app-cli</module>
     <module>test-integration</module>
