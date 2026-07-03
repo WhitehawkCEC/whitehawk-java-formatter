@@ -55,6 +55,8 @@ final class Printer {
   private static final byte UNARY = 4;
   private static final byte CAST_CLOSE = 8;
   private static final byte COLON_NO_SPACE_BEFORE = 16;
+  /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
+  private static final byte ANGLE_SCANNED = 32;
 
   private record Line(int firstToken, int tokenCount, int blanksBefore) {}
 
@@ -732,7 +734,8 @@ final class Printer {
         return;
       }
       case "<" -> {
-        if ((marks[i] & GENERIC_ANGLE) == 0) {
+        if ((marks[i] & (GENERIC_ANGLE | ANGLE_SCANNED)) == 0) {
+          marks[i] |= ANGLE_SCANNED;
           int end = typeArgumentsEnd(i);
           if (end >= 0) {
             markTypeArguments(i, end);
