@@ -88,13 +88,76 @@ final class Printer {
   private final int[] tokenLine;
 
   Printer(List<Token> tokens) {
-    this.tokens = tokens;
-    this.marks = new byte[tokens.size()];
-    this.breakBefore = new boolean[tokens.size()];
-    this.tokenLine = new int[tokens.size()];
+    this.tokens = expandLambdaParams(tokens);
+    this.marks = new byte[this.tokens.size()];
+    this.breakBefore = new boolean[this.tokens.size()];
+    this.tokenLine = new int[this.tokens.size()];
     computeBreaks();
     buildLines();
     this.lineIndent = new int[lines.size()];
+  }
+
+  /// Canonical style parenthesizes an implicit single lambda parameter and gives it `var`:
+  /// an unparenthesized `x ->` becomes `(var x) ->`. Already-parenthesized parameters and
+  /// switch-arrow labels (`case X ->`) are left untouched.
+  private static List<Token> expandLambdaParams(List<Token> in) {
+    List<Token> out = new ArrayList<>(in.size());
+    for (int i = 0; i < in.size(); i++) {
+      Token t = in.get(i);
+      if (isBareLambdaParam(in, i)) {
+        out.add(new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0()));
+        out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), 0, false));
+        out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
+        out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
+      } else {
+        out.add(t);
+      }
+    }
+    return out;
+  }
+
+  /// True when `in[i]` is a bare (unparenthesized) single lambda parameter: a non-keyword
+  /// identifier immediately followed by `->`, not reached from a `case` label.
+  private static boolean isBareLambdaParam(List<Token> in, int i) {
+    Token t = in.get(i);
+    if (t.kind() != Kind.IDENT || JavaLexer.KEYWORDS.contains(t.text())) {
+      return false;
+    }
+    int arrow = nextCodeIndex(in, i);
+    if (arrow < 0 || !in.get(arrow).is("->")) {
+      return false;
+    }
+    // Walk back over a label/qualifier list; a leading `case` marks a switch arrow, not a lambda.
+    for (int j = prevCodeIndex(in, i); j >= 0; j = prevCodeIndex(in, j)) {
+      Token p = in.get(j);
+      if (p.is("case")) {
+        return false;
+      }
+      boolean labelPart = p.is(".") || p.is(",")
+        || p.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(p.text());
+      if (!labelPart) {
+        break;
+      }
+    }
+    return true;
+  }
+
+  private static int nextCodeIndex(List<Token> in, int i) {
+    for (int j = i + 1; j < in.size(); j++) {
+      if (!in.get(j).isComment()) {
+        return j;
+      }
+    }
+    return -1;
+  }
+
+  private static int prevCodeIndex(List<Token> in, int i) {
+    for (int j = i - 1; j >= 0; j--) {
+      if (!in.get(j).isComment()) {
+        return j;
+      }
+    }
+    return -1;
   }
 
   /// Seeds [#breakBefore] from input line terminators, then forces the breaks canonical style
