@@ -16,8 +16,11 @@ import java.util.Set;
 /// Renders a token stream back to source. Line breaks are normalized: a bracket group that spans
 /// more than one input line has its opener and closer isolated on their own lines, and a method
 /// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
-/// call. A wrapped statement whose remaining breaks are all soft (none of the above) is joined
-/// back onto one line when it fits within the line limit. Everything else is recomputed too:
+/// call. A line wider than the line limit is wrapped the same way: its last outermost bracket
+/// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
+/// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
+/// joined back onto one line when it fits within the line limit. Everything else is recomputed
+/// too:
 /// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
 /// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
 /// newline).
@@ -85,7 +88,7 @@ final class Printer {
   private final List<Token> tokens;
   private final List<Line> lines = new ArrayList<>();
   private final byte[] marks;
-  private final int[] lineIndent;
+  private int[] lineIndent;
   /// True where a line break must precede the token; seeded from input newlines, then normalized.
   private final boolean[] breakBefore;
   /// True where the break was forced by canonical style (bracket isolation, chain breaks); such
@@ -365,7 +368,68 @@ final class Printer {
 
   String print() {
     analyze();
+    while (wrapLongLines()) {
+      lines.clear();
+      buildLines();
+      lineIndent = new int[lines.size()];
+      analyze();
+    }
     return emit(computeJoins());
+  }
+
+  /// Forces breaks that wrap each line wider than [#MAX_WIDTH]: the last bracket group on the
+  /// line that is outermost within it and non-empty gets its opener and closer isolated, the same
+  /// shape as a group that was already multiline in the input. Returns whether any break was
+  /// added; the caller then re-derives lines and indents and tries again, so a remainder that is
+  /// still too wide wraps at its next group.
+  private boolean wrapLongLines() {
+    boolean changed = false;
+    for (int li = 0; li < lines.size(); li++) {
+      if (lineWidth(li) <= MAX_WIDTH) {
+        continue;
+      }
+      Line line = lines.get(li);
+      int open = -1;
+      int close = -1;
+      Deque<Integer> openers = new ArrayDeque<>();
+      for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
+        Token t = tokens.get(i);
+        if (t.is("(") || t.is("[") || t.is("{")) {
+          openers.push(i);
+        } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
+          int o = openers.pop();
+          if (openers.isEmpty() && i > o + 1) {
+            open = o;
+            close = i;
+          }
+        }
+      }
+      if (open >= 0 && !breakBefore[open + 1]) {
+        breakBefore[open + 1] = true;
+        forcedBreak[open + 1] = true;
+        breakBefore[close] = true;
+        forcedBreak[close] = true;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// Output width of line `li`, or 0 when it contains a multiline token (text block, block
+  /// comment) and cannot be usefully measured or wrapped.
+  private int lineWidth(int li) {
+    Line line = lines.get(li);
+    int width = lineIndent[li];
+    for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
+      if (tokens.get(i).text().indexOf('\n') >= 0) {
+        return 0;
+      }
+      if (i > line.firstToken() && spaceBetween(i - 1, i)) {
+        width++;
+      }
+      width += tokens.get(i).text().length();
+    }
+    return width;
   }
 
   // ---------------------------------------------------------------------------------------------
