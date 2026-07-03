@@ -34,6 +34,7 @@
     <module>adapter-git-cli</module>
     <module>maven-deps-adapters</module>
     <module>app-cli</module>
+    <module>app-maven-plugin</module>
     <module>test-integration</module>
   </modules>
 
