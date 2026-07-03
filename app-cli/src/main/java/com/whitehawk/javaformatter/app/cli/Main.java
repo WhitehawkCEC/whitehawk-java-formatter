@@ -12,6 +12,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Stream;
 
 @NullMarked
@@ -25,18 +29,23 @@ public final class Main {
   @NullMarked
   @Singleton
   record Entry(@External Formatter formatter, @External TrackedJavaFiles trackedJavaFiles) {
-    public void run(String... args) throws IOException {
+    public void run(String... args) throws Exception {
       Path path = Path.of(args.length > 0 ? args[0] : ".");
-      try (Stream<Path> files = trackedJavaFiles.list(path)) {
-        for (Path file : (Iterable<Path>) files::iterator) {
-          format(file);
+      try (ExecutorService executor =
+              Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+          Stream<Path> files = trackedJavaFiles.list(path)) {
+        List<Future<Void>> results =
+            files.map(file -> executor.submit(() -> format(file))).toList();
+        for (Future<Void> result : results) {
+          result.get();
         }
       }
     }
 
-    private void format(Path file) throws IOException {
+    private Void format(Path file) throws IOException {
       String source = Files.readString(file, StandardCharsets.UTF_8);
       Files.writeString(file, formatter.format(source), StandardCharsets.UTF_8);
+      return null;
     }
   }
 }
