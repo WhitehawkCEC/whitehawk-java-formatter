@@ -390,14 +390,19 @@ final class Printer {
   }
 
   String print() {
-    analyze();
+    analyze(null);
     while (wrapLongLines() | breakGroupElements()) {
       lines.clear();
       buildLines();
       lineIndent = new int[lines.size()];
-      analyze();
+      analyze(null);
     }
-    return emit(computeJoins());
+    // A soft-broken continuation that gets joined back (e.g. a single `.call(` unwrapped onto the
+    // assignment line) opens its bracket scope on the joined line: re-indent so that scope flows
+    // from the join target, not from the now-discarded continuation indent.
+    boolean[] joinWithPrev = computeJoins();
+    analyze(joinWithPrev);
+    return emit(joinWithPrev);
   }
 
   /// Every top-level element of a multiline paren group starts on its own line: forces a break
@@ -493,11 +498,15 @@ final class Printer {
   // Analysis: scope tracking, line indents, token roles.
   // ---------------------------------------------------------------------------------------------
 
-  private void analyze() {
+  /// Assigns each line its indent and updates token roles. When `joinWithPrev` is non-null, a line
+  /// it flags as joined onto the previous one reuses the join run's head indent, so any bracket
+  /// scope opened on that line flows from the joined line rather than a continuation indent.
+  private void analyze(boolean @Nullable [] joinWithPrev) {
     Deque<Scope> stack = new ArrayDeque<>();
     stack.push(new Scope('B', 0, 0));
     List<Integer> pendingComments = new ArrayList<>();
     int prevIndent = 0;
+    int headIndent = 0;
 
     for (int li = 0; li < lines.size(); li++) {
       Line line = lines.get(li);
@@ -508,7 +517,9 @@ final class Printer {
       Scope top = stack.peek();
       Token first = tokens.get(line.firstToken());
       int indent;
-      if (isCloser(first)) {
+      if (joinWithPrev != null && joinWithPrev[li]) {
+        indent = headIndent;
+      } else if (isCloser(first)) {
         indent = scopeFor(stack, first).closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, line.firstToken(), prevIndent);
@@ -520,6 +531,9 @@ final class Printer {
       }
       lineIndent[li] = indent;
       prevIndent = indent;
+      if (joinWithPrev == null || !joinWithPrev[li]) {
+        headIndent = indent;
+      }
       int bodyIndent = isCloser(first) ? scopeFor(stack, first).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
