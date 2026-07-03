@@ -764,7 +764,9 @@ final class Printer {
   /// onto its own line, so an argument list the input happened to wrap rejoins rather than staying
   /// isolated (`.get(\n  "x"\n)` becomes `.get("x")`). A call whose arguments carry a brace group
   /// (a block, lambda body, or array initializer) is left broken so that group keeps its own
-  /// lines. Returns whether any break was removed.
+  /// lines. A call with more than one argument, or one whose chain is itself nested in a broken
+  /// paren group (e.g. a builder chain passed as an argument), keeps its arguments broken too.
+  /// Returns whether any break was removed.
   private boolean collapseChainCallArguments() {
     boolean changed = false;
     for (int dot = 0; dot < tokens.size(); dot++) {
@@ -776,6 +778,9 @@ final class Printer {
       int close = matchClose[open];
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list
+      }
+      if (hasTopLevelComma(open, close) || nestedInBrokenParen(dot, close)) {
+        continue; // multi-argument call, or a call nested in a broken paren, keeps its break
       }
       int li = lineIndexOf(dot);
       int width = lineIndent[li];
@@ -803,6 +808,40 @@ final class Printer {
       }
     }
     return changed;
+  }
+
+  /// Whether the paren `(open..close)` separates more than one argument: a comma at the paren's own
+  /// depth (not one nested in an inner bracket or a generic type-argument list).
+  private boolean hasTopLevelComma(int open, int close) {
+    int depth = 0;
+    int generic = 0;
+    for (int i = open + 1; i < close; i++) {
+      Token t = tokens.get(i);
+      if ((marks[i] & GENERIC_ANGLE) != 0) {
+        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        continue;
+      }
+      if (t.is("(") || t.is("[") || t.is("{")) {
+        depth++;
+      } else if (t.is(")") || t.is("]") || t.is("}")) {
+        depth--;
+      } else if (t.is(",") && depth == 0 && generic == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether the call at `dot` (closing at `close`) sits inside a broken paren group — a `(` whose
+  /// closer is isolated on its own line and that encloses the whole call. Such a call belongs to a
+  /// chain the surrounding group already lays out multiline, so its arguments stay broken.
+  private boolean nestedInBrokenParen(int dot, int close) {
+    for (int o = dot - 1; o >= 0; o--) {
+      if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Collapses each control-flow condition paren (`if`, `while`, `for`, `switch`, `catch`,
