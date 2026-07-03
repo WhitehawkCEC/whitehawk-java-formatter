@@ -104,6 +104,9 @@ final class Printer {
   private final int[] matchClose;
   /// Output width per token, or -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
+  /// Whether a space separates each token from its predecessor when they share a line. Depends
+  /// only on tokens and marks, so each [#analyze] pass leaves it fresh for width checks and emit.
+  private final boolean[] spaceBefore;
 
   Printer(List<Token> tokens) {
     this.tokens = expandLambdaParams(tokens);
@@ -115,6 +118,7 @@ final class Printer {
     this.matchOpen = new int[n];
     this.matchClose = new int[n];
     this.tokenWidth = new int[n];
+    this.spaceBefore = new boolean[n];
     for (int i = 0; i < n; i++) {
       String text = this.tokens.get(i).text();
       tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
@@ -514,7 +518,7 @@ final class Printer {
           multiline = true;
           break;
         }
-        if (i > start && spaceBetween(i - 1, i)) {
+        if (i > start && spaceBefore[i]) {
           width++;
         }
         width += tokenWidth[i];
@@ -552,7 +556,7 @@ final class Printer {
       if (tokenWidth[i] < 0) {
         return 0;
       }
-      if (i > line.firstToken() && spaceBetween(i - 1, i)) {
+      if (i > line.firstToken() && spaceBefore[i]) {
         width++;
       }
       width += tokenWidth[i];
@@ -609,6 +613,9 @@ final class Printer {
     }
     for (int ci : pendingComments) {
       lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : stack.peek().contentIndent;
+    }
+    for (int i = 1; i < tokens.size(); i++) {
+      spaceBefore[i] = spaceBetween(i - 1, i);
     }
   }
 
@@ -1126,7 +1133,7 @@ final class Printer {
       if (tokenWidth[i] < 0) {
         return false; // text block or multiline comment
       }
-      if (i > first && spaceBetween(i - 1, i)) {
+      if (i > first && spaceBefore[i]) {
         width++;
       }
       width += tokenWidth[i];
@@ -1149,7 +1156,7 @@ final class Printer {
         out.repeat(" ", lineIndent[li]);
       }
       for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-        if ((i > line.firstToken() || joined) && spaceBetween(i - 1, i)) {
+        if ((i > line.firstToken() || joined) && spaceBefore[i]) {
           out.append(' ');
         }
         appendToken(out, i, lineIndent[li]);
