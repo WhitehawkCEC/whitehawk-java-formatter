@@ -30,13 +30,13 @@ jobs:
 
       - name: Verify
         if: github.event_name == 'pull_request'
-        run: ./mvnw --batch-mode source:jar verify
+        run: mise exec -- ./mvnw --batch-mode source:jar verify
 
       # Credentials come from .mvn/settings.xml (server id `github`,
       # resolved from ${env.GITHUB_ACTOR}/${env.GITHUB_TOKEN}).
       - name: Deploy to GitHub Packages
         if: github.event_name == 'push'
-        run: ./mvnw --batch-mode source:jar deploy
+        run: mise exec -- ./mvnw --batch-mode source:jar deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,7 +57,7 @@ jobs:
 
       # Tests already run in the build job.
       - name: Build native image
-        run: ./mvnw --batch-mode -Pnative -DskipTests -pl app-cli -am package
+        run: mise exec -- ./mvnw --batch-mode -Pnative -DskipTests -pl app-cli -am package
 
       - uses: actions/upload-artifact@v7
         with:
