@@ -490,10 +490,18 @@ final class Printer {
         depth--;
       } else if (t.is(",") && generic == 0 && depth > 0) {
         int o = openers[depth - 1];
-        if (tokens.get(o).is("(") && breakBefore[o + 1] && !breakBefore[i + 1]) {
-          breakBefore[i + 1] = true;
-          forcedBreak[i + 1] = true;
-          changed = true;
+        if (tokens.get(o).is("(") && breakBefore[o + 1]) {
+          // The break starts the next element, but a trailing comment on the comma's line stays
+          // put: skip past it so the comment is not pushed onto its own line.
+          int target = i + 1;
+          while (target < tokens.size() && tokens.get(target).isComment() && !breakBefore[target]) {
+            target++;
+          }
+          if (target < tokens.size() && !breakBefore[target]) {
+            breakBefore[target] = true;
+            forcedBreak[target] = true;
+            changed = true;
+          }
         }
       }
     }
