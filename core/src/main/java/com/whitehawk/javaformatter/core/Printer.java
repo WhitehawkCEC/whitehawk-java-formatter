@@ -1321,19 +1321,34 @@ final class Printer {
       }
       boolean endForced = end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
       boolean joinsStatement = lastToken(end).is(";") || endForced;
-      // A chain receiver stays on the assignment head line even when the join overflows: breaking
-      // after `=` gains nothing since the receiver cannot wrap, and canonical style keeps it there.
-      boolean chainHead = endForced
-        && tokens.get(lines.get(end + 1).firstToken()).is(".")
-        && !hasMultilineToken(li, end);
-      if (end > li && joinsStatement && (fitsJoined(li, end) || chainHead)) {
-        for (int j = li + 1; j <= end; j++) {
+      if (end > li && joinsStatement) {
+        int joinEnd = joinEnd(li, end, endForced);
+        for (int j = li + 1; j <= joinEnd; j++) {
           joinWithPrev[j] = true;
         }
       }
       li = end + 1;
     }
     return joinWithPrev;
+  }
+
+  /// How far the joinable run [startLine..end] actually rejoins. A run that fits joins whole. One
+  /// that overflows still keeps a method-chain receiver on the head line — breaking after `=`
+  /// cannot wrap the receiver, and canonical style keeps it there — so it joins up to the line
+  /// before the first chain `.call(`, whether that break is soft (a lone call) or forced (a
+  /// multi-call chain, already stopping the run at `end + 1`). Returns `startLine` (no join) when
+  /// the overflow is not a chain receiver or a multiline token blocks the join.
+  private int joinEnd(int startLine, int end, boolean endForced) {
+    if (fitsJoined(startLine, end)) {
+      return end;
+    }
+    for (int m = startLine + 1; m <= end; m++) {
+      if (isCallDot(lines.get(m).firstToken())) {
+        return hasMultilineToken(startLine, m - 1) ? startLine : m - 1;
+      }
+    }
+    boolean endChainDot = endForced && tokens.get(lines.get(end + 1).firstToken()).is(".");
+    return endChainDot && !hasMultilineToken(startLine, end) ? end : startLine;
   }
 
   /// Whether line `li` may be joined onto the line before it.
