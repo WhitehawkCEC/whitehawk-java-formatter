@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project
+  xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.whitehawk.javaformatter</groupId>
+    <artifactId>maven-parent</artifactId>
+    <version>0-SNAPSHOT</version>
+    <relativePath>../maven-parent/pom.xml</relativePath>
+  </parent>
+
+  <artifactId>maven-deps-adapters</artifactId>
+  <packaging>pom</packaging>
+
+  <!--
+    Aggregates the `adapter-*` modules so applications can depend on the full
+    adapter set at once. Add a `<dependency>` here for each adapter module.
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>adapter-eclipse-jgit</artifactId>
+    </dependency>
+  </dependencies>
+</project>
