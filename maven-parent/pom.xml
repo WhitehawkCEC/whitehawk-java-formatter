@@ -21,6 +21,7 @@
 
     <version.avaje-inject>12.6</version.avaje-inject>
     <version.assertj>3.27.3</version.assertj>
+    <version.jgit>7.3.0.202506031305-r</version.jgit>
     <version.jspecify>1.0.0</version.jspecify>
     <version.junit>5.11.4</version.junit>
     <version.slf4j>2.0.16</version.slf4j>
@@ -84,6 +85,16 @@
         <groupId>${project.groupId}</groupId>
         <artifactId>app-cli</artifactId>
         <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>adapter-eclipse-jgit</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jgit</groupId>
+        <artifactId>org.eclipse.jgit</artifactId>
+        <version>${version.jgit}</version>
       </dependency>
 
       <dependency>
