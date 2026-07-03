@@ -764,8 +764,9 @@ final class Printer {
   /// onto its own line, so an argument list the input happened to wrap rejoins rather than staying
   /// isolated (`.get(\n  "x"\n)` becomes `.get("x")`). A call whose arguments carry a brace group
   /// (a block, lambda body, or array initializer) is left broken so that group keeps its own
-  /// lines. A call with more than one argument, or one whose chain is itself nested in a broken
-  /// paren group (e.g. a builder chain passed as an argument), keeps its arguments broken too.
+  /// lines. A call with more than one argument, one whose chain is itself nested in a broken
+  /// paren group (e.g. a builder chain passed as an argument), or one whose argument is itself a
+  /// broken multi-argument call (`.isEqualTo(Map.of(\n  ...\n))`) keeps its arguments broken too.
   /// Returns whether any break was removed.
   private boolean collapseChainCallArguments() {
     boolean changed = false;
@@ -779,8 +780,11 @@ final class Printer {
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list
       }
-      if (hasTopLevelComma(open, close) || nestedInBrokenParen(dot, close)) {
-        continue; // multi-argument call, or a call nested in a broken paren, keeps its break
+      if (hasTopLevelComma(open, close)
+        || nestedInBrokenParen(dot, close)
+        || containsBrokenMultiArgCall(open, close)) {
+        continue; // multi-argument call, a call nested in a broken paren, or one wrapping a broken
+        // multi-argument call, keeps its break
       }
       int li = lineIndexOf(dot);
       int width = lineIndent[li];
@@ -838,6 +842,20 @@ final class Printer {
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = dot - 1; o >= 0; o--) {
       if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether the argument list `(open..close)` wraps a call that is itself broken across lines and
+  /// carries more than one argument (`Map.of(\n  "a",\n  "b"\n)`). Collapsing the outer call would
+  /// flatten that inner call too, so its break is kept.
+  private boolean containsBrokenMultiArgCall(int open, int close) {
+    for (int i = open + 1; i < close; i++) {
+      if (tokens.get(i).is("(")
+        && breakBefore[matchClose[i]]
+        && hasTopLevelComma(i, matchClose[i])) {
         return true;
       }
     }
