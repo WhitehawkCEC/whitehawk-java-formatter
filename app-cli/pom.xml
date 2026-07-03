@@ -83,7 +83,7 @@
               </execution>
             </executions>
             <configuration>
-              <imageName>java-formatter</imageName>
+              <imageName>wh-java-formatter</imageName>
               <mainClass>${exec.mainClass}</mainClass>
               <buildArgs>
                 <buildArg>--no-fallback</buildArg>
