@@ -4,7 +4,6 @@ import org.jspecify.annotations.NullMarked;
 
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
-import io.micronaut.core.beans.BeanIntrospector;
 import jakarta.inject.Singleton;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;

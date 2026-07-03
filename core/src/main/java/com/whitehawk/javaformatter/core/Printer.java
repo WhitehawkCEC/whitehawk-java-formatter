@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -23,8 +24,9 @@ import java.util.Set;
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
 /// joined back onto one line when it fits within the line limit. A control-flow body without
-/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. Everything else is
-/// recomputed too:
+/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. A single-type or
+/// single-member import whose name is referenced nowhere else (code or comment) is dropped;
+/// wildcard imports are kept. Everything else is recomputed too:
 /// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
 /// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
 /// newline).
@@ -115,7 +117,7 @@ final class Printer {
   private final boolean[] spaceBefore;
 
   Printer(List<Token> tokens) {
-    this.tokens = insertMissingBraces(expandLambdaParams(tokens));
+    this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
     int n = this.tokens.size();
     this.marks = new byte[n];
     this.breakBefore = new boolean[n];
@@ -147,6 +149,108 @@ final class Printer {
         int o = openers.pop();
         matchClose[o] = i;
         matchOpen[i] = o;
+      }
+    }
+  }
+
+  /// Drops each single-type or single-member import whose imported simple name appears nowhere
+  /// else in the file — neither in code nor in comment text (so a `{@link Foo}` javadoc reference
+  /// keeps its import). Wildcard imports (`a.b.*`, `static a.b.*`) are always kept: the names they
+  /// contribute cannot be resolved from tokens alone. A removed import's leading blank line, if
+  /// any, is carried onto whatever follows so import-group spacing survives.
+  private static List<Token> removeUnusedImports(List<Token> in) {
+    int n = in.size();
+    List<int[]> imports = new ArrayList<>(); // {importIndex, semicolonIndex}
+    for (int i = 0; i < n; i++) {
+      if (!in.get(i).is("import")) {
+        continue;
+      }
+      int semi = i;
+      while (semi < n && !in.get(semi).is(";")) {
+        semi++;
+      }
+      if (semi < n) {
+        imports.add(new int[] {i, semi});
+      }
+      i = semi;
+    }
+    if (imports.isEmpty()) {
+      return in;
+    }
+
+    // Simple names referenced anywhere outside an import statement, in code or in comment text.
+    Set<String> used = new HashSet<>();
+    int imp = 0;
+    for (int i = 0; i < n; i++) {
+      if (imp < imports.size() && i == imports.get(imp)[0]) {
+        i = imports.get(imp)[1];
+        imp++;
+        continue;
+      }
+      Token t = in.get(i);
+      if (t.kind() == Kind.IDENT) {
+        used.add(t.text());
+      } else if (t.isComment()) {
+        addIdentifierWords(used, t.text());
+      }
+    }
+
+    boolean[] drop = new boolean[n];
+    boolean any = false;
+    for (int[] range : imports) {
+      if (in.get(range[1] - 1).is("*")) {
+        continue; // wildcard: keep
+      }
+      String name = null;
+      for (int i = range[1] - 1; i > range[0]; i--) {
+        Token t = in.get(i);
+        if (t.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(t.text())) {
+          name = t.text();
+          break;
+        }
+      }
+      if (name != null && !used.contains(name)) {
+        for (int i = range[0]; i <= range[1]; i++) {
+          drop[i] = true;
+        }
+        any = true;
+      }
+    }
+    if (!any) {
+      return in;
+    }
+
+    List<Token> out = new ArrayList<>(n);
+    int carriedNewlines = -1; // max newlinesBefore across a contiguous dropped run
+    for (int i = 0; i < n; i++) {
+      if (drop[i]) {
+        carriedNewlines = Math.max(carriedNewlines, in.get(i).newlinesBefore());
+        continue;
+      }
+      Token t = in.get(i);
+      if (carriedNewlines > t.newlinesBefore()) {
+        t = new Token(t.kind(), t.text(), t.start(), t.end(), carriedNewlines, t.atColumn0());
+      }
+      carriedNewlines = -1;
+      out.add(t);
+    }
+    return out;
+  }
+
+  /// Adds every Java-identifier-shaped word in `text` to `used`, so a comment that names a type
+  /// (a javadoc `{@link}`/`@see`, or a plain mention) is treated as a use of its import.
+  private static void addIdentifierWords(Set<String> used, String text) {
+    int len = text.length();
+    for (int i = 0; i < len; ) {
+      if (Character.isJavaIdentifierStart(text.charAt(i))) {
+        int j = i + 1;
+        while (j < len && Character.isJavaIdentifierPart(text.charAt(j))) {
+          j++;
+        }
+        used.add(text.substring(i, j));
+        i = j;
+      } else {
+        i++;
       }
     }
   }
