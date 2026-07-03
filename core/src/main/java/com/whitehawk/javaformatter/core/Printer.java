@@ -539,11 +539,19 @@ final class Printer {
     return changed;
   }
 
+  /// Lines partition the tokens in order, so binary search by token index.
   private int lineIndexOf(int token) {
-    for (int li = 0; li < lines.size(); li++) {
-      Line line = lines.get(li);
-      if (token >= line.firstToken() && token < line.firstToken() + line.tokenCount()) {
-        return li;
+    int lo = 0;
+    int hi = lines.size() - 1;
+    while (lo <= hi) {
+      int mid = (lo + hi) >>> 1;
+      Line line = lines.get(mid);
+      if (token < line.firstToken()) {
+        hi = mid - 1;
+      } else if (token >= line.firstToken() + line.tokenCount()) {
+        lo = mid + 1;
+      } else {
+        return mid;
       }
     }
     return -1;
