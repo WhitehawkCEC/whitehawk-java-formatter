@@ -392,17 +392,23 @@ final class Printer {
   /// brackets or generic type-argument lists don't count. Returns whether any break was added.
   private boolean breakGroupElements() {
     boolean changed = false;
+    // A marked type-argument list never contains `(`, so any angle open at a comma opened after
+    // the comma's enclosing paren: a running depth replaces a per-comma rescan.
+    int generic = 0;
     Deque<Integer> openers = new ArrayDeque<>();
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
+      if ((marks[i] & GENERIC_ANGLE) != 0) {
+        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        continue;
+      }
       if (t.is("(") || t.is("[") || t.is("{")) {
         openers.push(i);
       } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
         openers.pop();
-      } else if (t.is(",") && !openers.isEmpty()) {
+      } else if (t.is(",") && generic == 0 && !openers.isEmpty()) {
         int o = openers.peek();
-        if (tokens.get(o).is("(") && breakBefore[o + 1] && !insideGenericAngles(o, i)
-          && !breakBefore[i + 1]) {
+        if (tokens.get(o).is("(") && breakBefore[o + 1] && !breakBefore[i + 1]) {
           breakBefore[i + 1] = true;
           forcedBreak[i + 1] = true;
           changed = true;
@@ -410,23 +416,6 @@ final class Printer {
       }
     }
     return changed;
-  }
-
-  /// Whether the token at `i` sits inside a generic type-argument list opened after `from`.
-  private boolean insideGenericAngles(int from, int i) {
-    int depth = 0;
-    for (int j = from + 1; j < i; j++) {
-      if ((marks[j] & GENERIC_ANGLE) == 0) {
-        continue;
-      }
-      Token t = tokens.get(j);
-      if (t.is("<")) {
-        depth++;
-      } else {
-        depth -= t.text().length(); // `>`, `>>`, `>>>`
-      }
-    }
-    return depth > 0;
   }
 
   /// Forces breaks that wrap each line wider than [#MAX_WIDTH]: the last bracket group on the
