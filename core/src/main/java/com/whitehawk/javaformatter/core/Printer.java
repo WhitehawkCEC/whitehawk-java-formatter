@@ -1094,11 +1094,16 @@ final class Printer {
       out.append(t.text().stripTrailing());
       return;
     }
-    if (t.kind() == Kind.BLOCK_COMMENT && t.text().indexOf('\n') >= 0) {
-      String[] parts = t.text().split("\n", -1);
-      out.append(parts[0].stripTrailing());
-      for (int p = 1; p < parts.length; p++) {
-        String raw = parts[p].endsWith("\r") ? parts[p].substring(0, parts[p].length() - 1) : parts[p];
+    if (t.kind() == Kind.BLOCK_COMMENT && tokenWidth[i] < 0) {
+      String text = t.text();
+      int nl = text.indexOf('\n');
+      out.append(text.substring(0, nl).stripTrailing());
+      for (int from = nl + 1; from >= 0; ) {
+        int next = text.indexOf('\n', from);
+        String raw = next < 0 ? text.substring(from) : text.substring(from, next);
+        if (raw.endsWith("\r")) {
+          raw = raw.substring(0, raw.length() - 1);
+        }
         String stripped = raw.stripLeading();
         out.append('\n');
         if (stripped.startsWith("*")) {
@@ -1106,6 +1111,7 @@ final class Printer {
         } else {
           out.append(raw);
         }
+        from = next < 0 ? -1 : next + 1;
       }
       return;
     }
