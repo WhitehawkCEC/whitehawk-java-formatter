@@ -102,6 +102,8 @@ final class Printer {
   /// -1 elsewhere and at unbalanced brackets.
   private final int[] matchOpen;
   private final int[] matchClose;
+  /// Output width per token, or -1 for a multiline token (text block, block comment).
+  private final int[] tokenWidth;
 
   Printer(List<Token> tokens) {
     this.tokens = expandLambdaParams(tokens);
@@ -112,6 +114,11 @@ final class Printer {
     this.tokenLine = new int[n];
     this.matchOpen = new int[n];
     this.matchClose = new int[n];
+    this.tokenWidth = new int[n];
+    for (int i = 0; i < n; i++) {
+      String text = this.tokens.get(i).text();
+      tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
+    }
     computeBracketMatches();
     computeBreaks();
     buildLines();
@@ -465,13 +472,13 @@ final class Printer {
     Line line = lines.get(li);
     int width = lineIndent[li];
     for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-      if (tokens.get(i).text().indexOf('\n') >= 0) {
+      if (tokenWidth[i] < 0) {
         return 0;
       }
       if (i > line.firstToken() && spaceBetween(i - 1, i)) {
         width++;
       }
-      width += tokens.get(i).text().length();
+      width += tokenWidth[i];
     }
     return width;
   }
@@ -1026,13 +1033,13 @@ final class Printer {
     int end = last.firstToken() + last.tokenCount();
     int width = lineIndent[startLine];
     for (int i = first; i < end; i++) {
-      if (tokens.get(i).text().indexOf('\n') >= 0) {
+      if (tokenWidth[i] < 0) {
         return false; // text block or multiline comment
       }
       if (i > first && spaceBetween(i - 1, i)) {
         width++;
       }
-      width += tokens.get(i).text().length();
+      width += tokenWidth[i];
     }
     return width <= MAX_WIDTH;
   }
