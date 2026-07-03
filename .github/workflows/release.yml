@@ -1,0 +1,50 @@
+name: Release
+
+# Releases are cut by tagging (see `pnpm run release`, which runs
+# standard-version). The tag name is the release version, e.g. `1.2.3`.
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release + upload the binary
+      packages: write # deploy to GitHub Packages
+    steps:
+      - uses: actions/checkout@v7
+
+      # Installs the JDK pinned in mise.toml and exports JAVA_HOME.
+      - uses: jdx/mise-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
+
+      # Stamp the reactor with the tag version before building.
+      - name: Set release version
+        run: mise exec -- ./mvnw --batch-mode -Pprepare-release -DnewVersion=${{ github.ref_name }}
+
+      # One reactor pass: builds + tests everything, produces the native
+      # binary (app-cli), and deploys every artifact (incl. the maven plugin)
+      # to GitHub Packages. Credentials come from .mvn/settings.xml
+      # (server id `github`, resolved from ${env.GITHUB_ACTOR}/${env.GITHUB_TOKEN}).
+      - name: Build and deploy
+        run: mise exec -- ./mvnw --batch-mode -Pnative source:jar deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app-cli/target/wh-java-formatter
+          fail_on_unmatched_files: true
