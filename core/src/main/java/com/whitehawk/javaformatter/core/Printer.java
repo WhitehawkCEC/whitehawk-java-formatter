@@ -397,6 +397,14 @@ final class Printer {
       lineIndent = new int[lines.size()];
       analyze(null);
     }
+    // An isolated control-flow condition paren (`if`/`while`/...) whose whole header fits on one
+    // line collapses back, reversing the forced isolation that a soft join cannot cross.
+    if (collapseControlFlowHeaders()) {
+      lines.clear();
+      buildLines();
+      lineIndent = new int[lines.size()];
+      analyze(null);
+    }
     // A soft-broken continuation that gets joined back (e.g. a single `.call(` unwrapped onto the
     // assignment line) opens its bracket scope on the joined line: re-indent so that scope flows
     // from the join target, not from the now-discarded continuation indent.
@@ -475,6 +483,64 @@ final class Printer {
       }
     }
     return changed;
+  }
+
+  /// Collapses each control-flow condition paren (`if`, `while`, `for`, `switch`, `catch`,
+  /// `synchronized`, `try`) that was isolated because it spanned multiple input lines but whose
+  /// whole header — from the keyword's line start through the opening `{` — fits on one line.
+  /// Reverses the forced opener/closer/element breaks that a soft join cannot cross. Returns
+  /// whether any break was removed.
+  private boolean collapseControlFlowHeaders() {
+    boolean changed = false;
+    for (int open = 0; open < tokens.size(); open++) {
+      if (!tokens.get(open).is("(") || !breakBefore[open + 1]) {
+        continue; // not an isolated paren
+      }
+      int close = matchClose[open];
+      Token keyword = prevCode(open);
+      if (close < 0 || keyword == null || !PAREN_KEYWORDS.contains(keyword.text())) {
+        continue;
+      }
+      int brace = indexOfNextCode(close);
+      if (brace < 0 || !tokens.get(brace).is("{")) {
+        continue; // not a block header (excludes `return (..)`, `throw (..)`, etc.)
+      }
+      int li = lineIndexOf(open);
+      int start = lines.get(li).firstToken();
+      int width = lineIndent[li];
+      boolean multiline = false;
+      for (int i = start; i <= brace; i++) {
+        if (tokenWidth[i] < 0) {
+          multiline = true;
+          break;
+        }
+        if (i > start && spaceBetween(i - 1, i)) {
+          width++;
+        }
+        width += tokenWidth[i];
+      }
+      if (multiline || width > MAX_WIDTH) {
+        continue;
+      }
+      for (int i = open + 1; i <= close; i++) {
+        if (breakBefore[i]) {
+          breakBefore[i] = false;
+          forcedBreak[i] = false;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  private int lineIndexOf(int token) {
+    for (int li = 0; li < lines.size(); li++) {
+      Line line = lines.get(li);
+      if (token >= line.firstToken() && token < line.firstToken() + line.tokenCount()) {
+        return li;
+      }
+    }
+    return -1;
   }
 
   /// Output width of line `li`, or 0 when it contains a multiline token (text block, block
