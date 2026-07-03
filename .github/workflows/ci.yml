@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: graalvm
+          java-version: '25'
+          cache: maven
+          # Writes ~/.m2/settings.xml with a server matching the pom's
+          # distributionManagement id, authenticated via GITHUB_TOKEN.
+          server-id: github
+
+      - name: Verify
+        if: github.event_name == 'pull_request'
+        run: ./mvnw --batch-mode source:jar verify
+
+      - name: Deploy to GitHub Packages
+        if: github.event_name == 'push'
+        run: ./mvnw --batch-mode source:jar deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
