@@ -72,8 +72,9 @@ final class Printer {
     boolean sawAssert;
     boolean caseLabel;
     int generic;
-    /// Branch-line indent of each open ternary in the current element, innermost first.
-    final Deque<Integer> ternaryIndents = new ArrayDeque<>();
+    /// Branch-line indent of each open ternary in the current element, innermost first. Lazy:
+    /// most scopes never hold a ternary.
+    @Nullable Deque<Integer> ternaryIndents;
     // Cast detection: content so far could be a type reference.
     boolean typeLike = true;
     boolean sawPrimitive;
@@ -637,7 +638,7 @@ final class Printer {
     if (first.is("?") && (marks[firstToken] & WILDCARD) == 0) {
       return prevIndent + INDENT;
     }
-    if (first.is(":") && !top.ternaryIndents.isEmpty()) {
+    if (first.is(":") && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
       return top.ternaryIndents.peek();
     }
     return top.elementStartIndent + INDENT;
@@ -768,6 +769,9 @@ final class Printer {
         if (top.generic > 0) {
           marks[i] |= WILDCARD;
         } else {
+          if (top.ternaryIndents == null) {
+            top.ternaryIndents = new ArrayDeque<>();
+          }
           top.ternaryIndents.push(breakBefore[i] ? indent : top.elementStartIndent + INDENT);
           afterContentToken(top, false);
         }
@@ -851,7 +855,7 @@ final class Printer {
   }
 
   private void analyzeColon(Deque<Scope> stack, int i, Scope top) {
-    if (!top.ternaryIndents.isEmpty()) {
+    if (top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
       top.ternaryIndents.pop();
       afterContentToken(top, false);
       return;
@@ -884,7 +888,9 @@ final class Printer {
     scope.sawEnum = false;
     scope.sawAssert = false;
     scope.generic = 0;
-    scope.ternaryIndents.clear();
+    if (scope.ternaryIndents != null) {
+      scope.ternaryIndents.clear();
+    }
     scope.typeLike = true;
     scope.sawPrimitive = false;
     scope.hasContent = false;
