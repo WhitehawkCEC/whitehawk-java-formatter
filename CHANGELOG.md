@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.2.3](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.2...0.2.3) (2026-07-03)
+
+
+### Features
+
+* **core:** collapse an empty bracket group onto one line ([4ccdc13](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/4ccdc136d986fc9383686e7100664f3bd90decc9))
+* **core:** drop unused single imports ([c865cfc](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/c865cfc48df4d0d8646482619084e157060743a0))
+
 ## [0.2.2](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.1...0.2.2) (2026-07-03)
 
 
