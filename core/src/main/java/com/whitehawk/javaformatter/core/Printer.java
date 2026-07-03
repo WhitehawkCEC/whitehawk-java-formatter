@@ -7,14 +7,17 @@ import org.jspecify.annotations.NullMarked;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.Set;
 
-/// Renders a token stream back to source. Line breaks between tokens are preserved as-is;
-/// everything else is recomputed: indentation, spacing between tokens on a line, blank-line
-/// counts (runs collapse to one; none directly after a `{`/`(` line nor before a `}`/`)` line),
-/// and line endings (LF, single final newline).
+/// Renders a token stream back to source. Line breaks are normalized: a bracket group that spans
+/// more than one input line has its opener and closer isolated on their own lines, and a method
+/// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
+/// call. Everything else is recomputed too: indentation, spacing between tokens on a line,
+/// blank-line counts (runs collapse to one; none directly after a `{`/`(` line nor before a
+/// `}`/`)` line), and line endings (LF, single final newline).
 @NullMarked
 final class Printer {
   private static final int INDENT = 2;
@@ -79,19 +82,121 @@ final class Printer {
   private final List<Line> lines = new ArrayList<>();
   private final byte[] marks;
   private final int[] lineIndent;
+  /// True where a line break must precede the token; seeded from input newlines, then normalized.
+  private final boolean[] breakBefore;
+  /// Input line index per token (blank lines ignored), used to decide what "spans multiple lines".
+  private final int[] tokenLine;
 
   Printer(List<Token> tokens) {
     this.tokens = tokens;
     this.marks = new byte[tokens.size()];
+    this.breakBefore = new boolean[tokens.size()];
+    this.tokenLine = new int[tokens.size()];
+    computeBreaks();
     buildLines();
     this.lineIndent = new int[lines.size()];
+  }
+
+  /// Seeds [#breakBefore] from input line terminators, then forces the breaks canonical style
+  /// requires around multiline brackets and method chains.
+  private void computeBreaks() {
+    int n = tokens.size();
+    int line = 0;
+    for (int i = 0; i < n; i++) {
+      if (i > 0 && tokens.get(i).newlinesBefore() > 0) {
+        line++;
+        breakBefore[i] = true;
+      }
+      tokenLine[i] = line;
+    }
+
+    int[] close = new int[n];
+    int[] open = new int[n];
+    Arrays.fill(close, -1);
+    Arrays.fill(open, -1);
+    Deque<Integer> openers = new ArrayDeque<>();
+    for (int i = 0; i < n; i++) {
+      Token t = tokens.get(i);
+      if (t.is("(") || t.is("[") || t.is("{")) {
+        openers.push(i);
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
+        int o = openers.pop();
+        close[o] = i;
+        open[i] = o;
+      }
+    }
+
+    // A bracket group spanning more than one line isolates its opener and closer.
+    for (int o = 0; o < n; o++) {
+      int c = close[o];
+      if (c > o + 1 && tokenLine[o] != tokenLine[c]) {
+        breakBefore[o + 1] = true;
+        breakBefore[c] = true;
+      }
+    }
+
+    forceChainBreaks(close);
+  }
+
+  /// Breaks before every `.name(` call in each method chain that spans more than one input line.
+  private void forceChainBreaks(int[] close) {
+    int n = tokens.size();
+    int[] nextCall = new int[n];
+    boolean[] callDot = new boolean[n];
+    boolean[] linked = new boolean[n];
+    Arrays.fill(nextCall, -1);
+    for (int p = 0; p < n; p++) {
+      if (!isCallDot(p)) {
+        continue;
+      }
+      callDot[p] = true;
+      int paren = indexOfNextCode(indexOfNextCode(p));
+      int next = indexOfNextCode(close[paren]);
+      if (next >= 0 && isCallDot(next)) {
+        nextCall[p] = next;
+        linked[next] = true;
+      }
+    }
+    for (int p = 0; p < n; p++) {
+      if (!callDot[p] || linked[p]) {
+        continue; // not the head of a chain
+      }
+      List<Integer> chain = new ArrayList<>();
+      for (int c = p; c >= 0; c = nextCall[c]) {
+        chain.add(c);
+      }
+      if (chain.size() < 2) {
+        continue;
+      }
+      int last = chain.get(chain.size() - 1);
+      int lastClose = close[indexOfNextCode(indexOfNextCode(last))];
+      if (tokenLine[p] != tokenLine[lastClose]) {
+        for (int dot : chain) {
+          breakBefore[dot] = true;
+        }
+      }
+    }
+  }
+
+  /// A `.` that begins a method call: `. name (`.
+  private boolean isCallDot(int p) {
+    if (!tokens.get(p).is(".")) {
+      return false;
+    }
+    int name = indexOfNextCode(p);
+    if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+      return false;
+    }
+    int paren = indexOfNextCode(name);
+    return paren >= 0 && tokens.get(paren).is("(");
   }
 
   private void buildLines() {
     int lineStart = 0;
     for (int i = 1; i <= tokens.size(); i++) {
-      if (i == tokens.size() || tokens.get(i).newlinesBefore() > 0) {
-        lines.add(new Line(lineStart, i - lineStart, lineStart == 0 ? 0 : tokens.get(lineStart).newlinesBefore() - 1));
+      if (i == tokens.size() || breakBefore[i]) {
+        int nb = lineStart == 0 ? 0 : tokens.get(lineStart).newlinesBefore();
+        lines.add(new Line(lineStart, i - lineStart, nb > 1 ? nb - 1 : 0));
         lineStart = i;
       }
     }
@@ -560,12 +665,20 @@ final class Printer {
   }
 
   private Token nextCode(int i) {
+    int idx = indexOfNextCode(i);
+    return idx < 0 ? null : tokens.get(idx);
+  }
+
+  private int indexOfNextCode(int i) {
+    if (i < 0) {
+      return -1;
+    }
     for (int j = i + 1; j < tokens.size(); j++) {
       if (!tokens.get(j).isComment()) {
-        return tokens.get(j);
+        return j;
       }
     }
-    return null;
+    return -1;
   }
 
   // ---------------------------------------------------------------------------------------------
