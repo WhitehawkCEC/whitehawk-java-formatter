@@ -24,7 +24,9 @@ import java.util.Set;
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
 /// joined back onto one line when it fits within the line limit. A control-flow body without
-/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. A single-type or
+/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. An empty bracket
+/// group the input split across lines collapses back onto one line (`{\n}` becomes `{}`). A
+/// single-type or
 /// single-member import whose name is referenced nowhere else (code or comment) is dropped;
 /// wildcard imports are kept. Everything else is recomputed too:
 /// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
@@ -606,6 +608,15 @@ final class Printer {
         breakBefore[c] = true;
         forcedBreak[o + 1] = true;
         forcedBreak[c] = true;
+      }
+    }
+
+    // An empty bracket group (closer directly after its opener) collapses onto one line, even
+    // when the input split it: `{\n}` becomes `{}`.
+    for (int c = 0; c < n; c++) {
+      if (matchOpen[c] == c - 1) {
+        breakBefore[c] = false;
+        forcedBreak[c] = false;
       }
     }
 
