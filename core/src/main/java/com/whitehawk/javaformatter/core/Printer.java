@@ -1082,6 +1082,10 @@ final class Printer {
     if (line.blanksBefore() > 0 || forcedBreak[line.firstToken()]) {
       return false;
     }
+    // A standalone comment line stays on its own line rather than trailing the previous one.
+    if (isCommentOnly(line)) {
+      return false;
+    }
     Token first = tokens.get(line.firstToken());
     if (first.is("}") || first.is("@")) {
       return false;
