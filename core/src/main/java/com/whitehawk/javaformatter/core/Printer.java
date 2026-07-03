@@ -438,7 +438,8 @@ final class Printer {
     // A marked type-argument list never contains `(`, so any angle open at a comma opened after
     // the comma's enclosing paren: a running depth replaces a per-comma rescan.
     int generic = 0;
-    Deque<Integer> openers = new ArrayDeque<>();
+    int[] openers = new int[tokens.size()];
+    int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
       if ((marks[i] & GENERIC_ANGLE) != 0) {
@@ -446,11 +447,11 @@ final class Printer {
         continue;
       }
       if (t.is("(") || t.is("[") || t.is("{")) {
-        openers.push(i);
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
-        openers.pop();
-      } else if (t.is(",") && generic == 0 && !openers.isEmpty()) {
-        int o = openers.peek();
+        openers[depth++] = i;
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
+        depth--;
+      } else if (t.is(",") && generic == 0 && depth > 0) {
+        int o = openers[depth - 1];
         if (tokens.get(o).is("(") && breakBefore[o + 1] && !breakBefore[i + 1]) {
           breakBefore[i + 1] = true;
           forcedBreak[i + 1] = true;
