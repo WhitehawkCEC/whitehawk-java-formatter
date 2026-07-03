@@ -69,44 +69,6 @@
       <id>native</id>
       <build>
         <plugins>
-          <!-- native-image cannot analyze the signed JGit jar: it pulls the jar's code-signing
-               certificate chain into the image heap and fails on the JDK-internal X509CertInfo.
-               Shade all runtime deps into one uber-jar, stripping the signature files, and feed
-               that single jar to the native build below. -->
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>shade-for-native</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <shadedArtifactAttached>true</shadedArtifactAttached>
-                  <shadedClassifierName>native</shadedClassifierName>
-                  <createDependencyReducedPom>false</createDependencyReducedPom>
-                  <!-- Each module contributes an avaje InjectExtension service entry; merge them
-                       rather than letting one jar's file overwrite the others. -->
-                  <transformers>
-                    <transformer
-                      implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                  </transformers>
-                  <filters>
-                    <filter>
-                      <artifact>*:*</artifact>
-                      <excludes>
-                        <exclude>META-INF/*.SF</exclude>
-                        <exclude>META-INF/*.DSA</exclude>
-                        <exclude>META-INF/*.RSA</exclude>
-                      </excludes>
-                    </filter>
-                  </filters>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
           <plugin>
             <groupId>org.graalvm.buildtools</groupId>
             <artifactId>native-maven-plugin</artifactId>
@@ -123,9 +85,6 @@
             <configuration>
               <imageName>java-formatter</imageName>
               <mainClass>${exec.mainClass}</mainClass>
-              <classpath>
-                <param>${project.build.directory}/${project.build.finalName}-native.jar</param>
-              </classpath>
               <buildArgs>
                 <buildArg>--no-fallback</buildArg>
               </buildArgs>
