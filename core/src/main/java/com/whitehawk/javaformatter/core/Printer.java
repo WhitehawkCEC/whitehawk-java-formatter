@@ -17,7 +17,8 @@ import java.util.Set;
 /// more than one input line has its opener and closer isolated on their own lines (and each of a
 /// paren group's top-level comma-separated elements then starts its own line), and a method
 /// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
-/// call. A line wider than the line limit is wrapped the same way: its last outermost bracket
+/// call, and a string concatenation the input broke before a `+` of keeps that break. A line wider
+/// than the line limit is wrapped the same way: its last outermost bracket
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
 /// joined back onto one line when it fits within the line limit. Everything else is recomputed
@@ -330,6 +331,7 @@ final class Printer {
     }
 
     forceChainBreaks();
+    forceConcatBreaks();
 
     // Canonical style never breaks before a method declaration's `throws` clause: join it to the
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
@@ -393,6 +395,42 @@ final class Printer {
     }
     int paren = indexOfNextCode(name);
     return paren >= 0 && tokens.get(paren).is("(");
+  }
+
+  /// Preserves an intentionally wrapped string concatenation: a `+` the input already broke before
+  /// and that joins a string literal keeps its break, so a piecewise-built literal (e.g. a regex
+  /// split across lines) is not collapsed back onto one line.
+  private void forceConcatBreaks() {
+    for (int i = 0; i < tokens.size(); i++) {
+      if (breakBefore[i] && isStringConcatPlus(i)) {
+        forcedBreak[i] = true;
+      }
+    }
+  }
+
+  /// A binary `+` that concatenates a string: one operand is a string or text-block literal and the
+  /// token before it ends an operand (so it is not a unary sign).
+  private boolean isStringConcatPlus(int i) {
+    if (!tokens.get(i).is("+")) {
+      return false;
+    }
+    Token prev = prevCode(i);
+    Token next = nextCode(i);
+    if (prev == null || next == null || !endsOperand(prev)) {
+      return false;
+    }
+    return isStringLiteral(prev) || isStringLiteral(next);
+  }
+
+  private static boolean isStringLiteral(Token t) {
+    return t.kind() == Kind.STRING || t.kind() == Kind.TEXT_BLOCK;
+  }
+
+  private static boolean endsOperand(Token t) {
+    return t.is(")") || t.is("]")
+      || t.kind() == Kind.STRING || t.kind() == Kind.TEXT_BLOCK
+      || t.kind() == Kind.CHAR || t.kind() == Kind.NUMBER
+      || t.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(t.text());
   }
 
   private void buildLines() {
