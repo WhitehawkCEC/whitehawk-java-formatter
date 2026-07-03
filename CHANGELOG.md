@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.2.1](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.0...0.2.1) (2026-07-03)
+
+
+### Features
+
+* **core:** keep a broken chain call's multi-argument or nested arguments broken ([06a9af7](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/06a9af7f72eeced482d0151e2dd04bf01eb98d6a))
+
 ## [0.2.0](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.1.1...0.2.0) (2026-07-03)
 
 
