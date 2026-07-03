@@ -70,7 +70,8 @@ final class Printer {
     boolean sawAssert;
     boolean caseLabel;
     int generic;
-    int ternary;
+    /// Branch-line indent of each open ternary in the current element, innermost first.
+    final Deque<Integer> ternaryIndents = new ArrayDeque<>();
     // Cast detection: content so far could be a type reference.
     boolean typeLike = true;
     boolean sawPrimitive;
@@ -483,6 +484,7 @@ final class Printer {
     Deque<Scope> stack = new ArrayDeque<>();
     stack.push(new Scope('B', 0, 0));
     List<Integer> pendingComments = new ArrayList<>();
+    int prevIndent = 0;
 
     for (int li = 0; li < lines.size(); li++) {
       Line line = lines.get(li);
@@ -496,7 +498,7 @@ final class Printer {
       if (isCloser(first)) {
         indent = scopeFor(stack, first).closeIndent;
       } else if (top.elementOpen) {
-        indent = top.elementStartIndent + INDENT;
+        indent = continuationIndent(top, line.firstToken(), prevIndent);
       } else {
         indent = top.contentIndent;
         if (top.kind == 'S' && !first.is("case") && !first.is("default")) {
@@ -504,6 +506,7 @@ final class Printer {
         }
       }
       lineIndent[li] = indent;
+      prevIndent = indent;
       int bodyIndent = isCloser(first) ? scopeFor(stack, first).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
@@ -514,6 +517,20 @@ final class Printer {
     for (int ci : pendingComments) {
       lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : stack.peek().contentIndent;
     }
+  }
+
+  /// Indent of a wrapped element's continuation line, normally one level past the element start.
+  /// A ternary's branch lines sit one level past the line holding the end of its condition — one
+  /// level past the previous line for `?`, aligned with the matching `?` for `:`.
+  private int continuationIndent(Scope top, int firstToken, int prevIndent) {
+    Token first = tokens.get(firstToken);
+    if (first.is("?") && (marks[firstToken] & WILDCARD) == 0) {
+      return prevIndent + INDENT;
+    }
+    if (first.is(":") && !top.ternaryIndents.isEmpty()) {
+      return top.ternaryIndents.peek();
+    }
+    return top.elementStartIndent + INDENT;
   }
 
   private boolean isCommentOnly(Line line) {
@@ -637,7 +654,7 @@ final class Printer {
         if (top.generic > 0) {
           marks[i] |= WILDCARD;
         } else {
-          top.ternary++;
+          top.ternaryIndents.push(breakBefore[i] ? indent : top.elementStartIndent + INDENT);
           afterContentToken(top, false);
         }
         return;
@@ -720,8 +737,8 @@ final class Printer {
   }
 
   private void analyzeColon(Deque<Scope> stack, int i, Scope top) {
-    if (top.ternary > 0) {
-      top.ternary--;
+    if (!top.ternaryIndents.isEmpty()) {
+      top.ternaryIndents.pop();
       afterContentToken(top, false);
       return;
     }
@@ -753,7 +770,7 @@ final class Printer {
     scope.sawEnum = false;
     scope.sawAssert = false;
     scope.generic = 0;
-    scope.ternary = 0;
+    scope.ternaryIndents.clear();
     scope.typeLike = true;
     scope.sawPrimitive = false;
     scope.hasContent = false;
