@@ -1,4 +1,7 @@
+[settings]
+lockfile = true
+idiomatic_version_file_enable_tools = ["pnpm"]
+
 [tools]
 java = "graalvm-community-25.0.2"
 node = "lts"
-pnpm = "10"
