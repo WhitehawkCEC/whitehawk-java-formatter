@@ -434,6 +434,18 @@ public final class Printer {
         changed = true;
         continue;
       }
+      // A too-long condition breaks at its logical operators rather than isolating a bracket group
+      // nested in one operand; a single seeded break then spreads to every operator via
+      // forceLogicalBreaks.
+      List<Integer> logical = topLevelLogicalOperators(line.firstToken(), line.firstToken() + line.tokenCount() - 1);
+      if (!logical.isEmpty() && !breakBefore[logical.get(0)]) {
+        for (int b : logical) {
+          breakBefore[b] = true;
+          forcedBreak[b] = true;
+        }
+        changed = true;
+        continue;
+      }
       int open = -1;
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
@@ -535,6 +547,24 @@ public final class Printer {
           && !marks.has(j, Mark.WILDCARD)
           && (tokenSym[j] == Sym.QUESTION || tokenSym[j] == Sym.COLON && !ops.isEmpty())
       ) {
+        ops.add(j);
+      }
+    }
+    return ops;
+  }
+
+  private List<Integer> topLevelLogicalOperators(int i, int end) {
+    List<Integer> ops = new ArrayList<>();
+    int depth = 0;
+    int generic = 0;
+    for (int j = i; j <= end; j++) {
+      if (marks.has(j, Mark.GENERIC_ANGLE)) {
+        generic += angleDepthDelta(j);
+      } else if (tokenClasses.has(j, Classification.OPENER)) {
+        depth++;
+      } else if (tokenClasses.has(j, Classification.CLOSER)) {
+        depth--;
+      } else if (depth == 0 && generic == 0 && isLogicalOp(j)) {
         ops.add(j);
       }
     }
