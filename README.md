@@ -1,10 +1,10 @@
-Opinionated `.java` formatter with zero config allowed.
+Opinionated `.java` formatter with zero config.
 
-## Examples
+## Before/After Examples
 
-See [Test examples](./test-integration/src/test/resources/format-cases/).
+See [Test cases](./test-integration/src/test/resources/format-cases/).
 
-## Usage
+## Usage (CLI)
 
 ```
 wh-java-formatter [--changed] [PATH]
