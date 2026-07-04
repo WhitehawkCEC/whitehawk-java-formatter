@@ -107,10 +107,6 @@ public final class Printer {
     return hasClass(i, Classification.OPENER);
   }
 
-  private boolean isCloser(int i) {
-    return hasClass(i, Classification.CLOSER);
-  }
-
   private void computeBracketMatches() {
     Arrays.fill(matchOpen, -1);
     Arrays.fill(matchClose, -1);
@@ -120,7 +116,7 @@ public final class Printer {
       enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
       if (isOpener(i)) {
         openers[depth++] = i;
-      } else if (isCloser(i) && depth > 0) {
+      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         int o = openers[--depth];
         matchClose[o] = i;
         matchOpen[i] = o;
@@ -285,7 +281,7 @@ public final class Printer {
       }
       forcedBreak[i] = true;
       for (int j = i - 1; j >= 0; j--) {
-        if (isCloser(j) && matchOpen[j] >= 0) {
+        if (hasClass(j, Classification.CLOSER) && matchOpen[j] >= 0) {
           j = matchOpen[j]; // a nested group is skipped whole
         } else if (endsOperatorElement(j)) {
           break;
@@ -309,7 +305,7 @@ public final class Printer {
   }
 
   private boolean endsOperatorElement(int i) {
-    return isOpener(i) || isCloser(i) || switch (tokenSym[i]) {
+    return isOpener(i) || hasClass(i, Classification.CLOSER) || switch (tokenSym[i]) {
       case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
       default -> false;
     };
@@ -396,7 +392,7 @@ public final class Printer {
       }
       if (isOpener(i)) {
         openerStack[depth++] = i;
-      } else if (isCloser(i) && depth > 0) {
+      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         depth--;
       } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
         int o = openerStack[depth - 1];
@@ -495,7 +491,7 @@ public final class Printer {
     int generic = 0;
     for (int j = i; j < tokens.size(); j++) {
       Sym sym = tokenSym[j];
-      if (depth == 0 && generic == 0 && (isCloser(j) || sym == Sym.SEMI || sym == Sym.COMMA)) {
+      if (depth == 0 && generic == 0 && (hasClass(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)) {
         return j - 1;
       }
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
@@ -505,7 +501,7 @@ public final class Printer {
         generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
-      } else if (isCloser(j)) {
+      } else if (hasClass(j, Classification.CLOSER)) {
         depth--;
       }
     }
@@ -521,7 +517,7 @@ public final class Printer {
         generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
-      } else if (isCloser(j)) {
+      } else if (hasClass(j, Classification.CLOSER)) {
         depth--;
       } else if (
         depth == 0
@@ -654,7 +650,7 @@ public final class Printer {
       }
       if (isOpener(i)) {
         openerStack[depth++] = i;
-      } else if (isCloser(i) && depth > 0) {
+      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         depth--;
       } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
         multiArg[openerStack[depth - 1]] = true;
@@ -729,7 +725,7 @@ public final class Printer {
     for (int i = open + 1; i < close; i++) {
       if (isOpener(i)) {
         depth++;
-      } else if (isCloser(i)) {
+      } else if (hasClass(i, Classification.CLOSER)) {
         depth--;
       } else if (depth == 0 && tokenSym[i] == Sym.SEMI) {
         return true;
@@ -808,7 +804,7 @@ public final class Printer {
       int indent;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
-      } else if (isCloser(firstToken)) {
+      } else if (hasClass(firstToken, Classification.CLOSER)) {
         indent = scopeFor(stack, firstSym).closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, firstToken, prevIndent);
@@ -823,7 +819,7 @@ public final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = isCloser(firstToken) ? scopeFor(stack, firstSym).contentIndent : indent;
+      int bodyIndent = hasClass(firstToken, Classification.CLOSER) ? scopeFor(stack, firstSym).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
@@ -892,7 +888,7 @@ public final class Printer {
         continue;
       }
       Scope top = stack.peek();
-      if (!top.elementOpen && !isCloser(i)) {
+      if (!top.elementOpen && !hasClass(i, Classification.CLOSER)) {
         top.elementOpen = true;
         top.elementStartIndent = indent;
         top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
