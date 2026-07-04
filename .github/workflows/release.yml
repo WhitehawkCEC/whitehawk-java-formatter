@@ -21,7 +21,6 @@ jobs:
         include:
           - { os: ubuntu-latest, asset: wh-java-formatter-linux-x64,    bin: wh-java-formatter }
           - { os: macos-latest,  asset: wh-java-formatter-darwin-arm64, bin: wh-java-formatter }
-          - { os: macos-13,      asset: wh-java-formatter-darwin-x64,   bin: wh-java-formatter }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
