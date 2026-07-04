@@ -146,7 +146,7 @@ final class Printer {
     }
   }
 
-  /// A class a token's text can belong to, resolved once per token (see [#maskOf]) so hot paths
+  /// A class a token's text can belong to, resolved once per token (see [#classify]) so hot paths
   /// avoid repeated set lookups.
   private enum Classification {
     KEYWORD,
@@ -157,36 +157,32 @@ final class Printer {
     OPENER,
     CLOSER;
 
-    final byte bit = (byte) (1 << ordinal());
-
-    /// The classes of a token's text as a bitmask of [#bit]s. Every classifying set entry is
+    /// Records the classes of the token at `i` into `classes`. Every classifying set entry is
     /// either identifier-shaped or an operator, so only the matching token kind is probed.
-    static byte maskOf(Token t) {
-      byte classes = 0;
+    static void classify(ArraySmallEnumSet<Classification> classes, int i, Token t) {
       if (t.kind() == Kind.PUNCT) {
         if (BINARY_OPERATORS.contains(t.text())) {
-          classes |= BINARY_OPERATOR.bit;
+          classes.set(i, BINARY_OPERATOR);
         }
         switch (t.text()) {
-          case "(", "[", "{" -> classes |= OPENER.bit;
-          case ")", "]", "}" -> classes |= CLOSER.bit;
+          case "(", "[", "{" -> classes.set(i, OPENER);
+          case ")", "]", "}" -> classes.set(i, CLOSER);
           default -> {}
         }
       } else if (t.kind() == Kind.IDENT) {
         if (t.isKeyword()) {
-          classes |= KEYWORD.bit;
+          classes.set(i, KEYWORD);
         }
         if (t.isPrimitive()) {
-          classes |= PRIMITIVE.bit;
+          classes.set(i, PRIMITIVE);
         }
         if (t.isModifier()) {
-          classes |= MODIFIER.bit;
+          classes.set(i, MODIFIER);
         }
         if (PAREN_KEYWORDS.contains(t.text())) {
-          classes |= PAREN_KEYWORD.bit;
+          classes.set(i, PAREN_KEYWORD);
         }
       }
-      return classes;
     }
   }
 
@@ -340,8 +336,8 @@ final class Printer {
   private final int[] enclosingOpen;
   /// Output width per token, or -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
-  /// Classes of each token's text as a [Classification] bitmask, resolved once.
-  private final byte[] tokenClasses;
+  /// Classes of each token's text, resolved once.
+  private final ArraySmallEnumSet<Classification> tokenClasses;
   /// Dispatch symbol of each token's text, resolved once.
   private final Sym[] tokenSym;
   /// Whether a space separates each token from its predecessor when they share a line. Depends
@@ -372,7 +368,7 @@ final class Printer {
     this.matchClose = new int[n];
     this.enclosingOpen = new int[n];
     this.tokenWidth = new int[n];
-    this.tokenClasses = new byte[n];
+    this.tokenClasses = new ArraySmallEnumSet<>(Classification.class, n);
     this.tokenSym = new Sym[n];
     this.spaceBefore = new boolean[n];
     this.openerStack = new int[n];
@@ -383,7 +379,7 @@ final class Printer {
       String text = t.text();
       tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
       prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
-      tokenClasses[i] = Classification.maskOf(t);
+      Classification.classify(tokenClasses, i, t);
       tokenSym[i] = Sym.of(text);
     }
     computeBracketMatches();
@@ -393,7 +389,7 @@ final class Printer {
   }
 
   private boolean hasClass(int i, Classification cls) {
-    return (tokenClasses[i] & cls.bit) != 0;
+    return tokenClasses.has(i, cls);
   }
 
   /// The token at `i` is `(`, `[`, or `{`.
