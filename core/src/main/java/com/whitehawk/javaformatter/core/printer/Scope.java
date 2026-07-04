@@ -8,7 +8,16 @@ import java.util.Deque;
 /// Mutable and pooled: recycled across passes instead of reallocated per bracket per pass.
 @NullMarked
 final class Scope {
-  char kind; // B=block, S=switch body, E=enum body, P=paren, K=bracket, A=array initializer
+  enum Kind {
+    BLOCK,
+    SWITCH_BODY,
+    ENUM_BODY,
+    PAREN,
+    BRACKET,
+    ARRAY_INIT,
+  }
+
+  Kind kind;
   int contentIndent;
   int closeIndent;
   int elementStartIndent;
@@ -29,7 +38,7 @@ final class Scope {
   // Annotation-only statement tracking: 0=start, 1=expect name part, 2=after name, -1=broken.
   int annotationState;
 
-  Scope init(char kind, int contentIndent, int closeIndent) {
+  Scope init(Kind kind, int contentIndent, int closeIndent) {
     this.kind = kind;
     this.contentIndent = contentIndent;
     this.closeIndent = closeIndent;

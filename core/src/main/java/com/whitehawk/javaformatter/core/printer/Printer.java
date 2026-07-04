@@ -791,7 +791,7 @@ public final class Printer {
   private void analyze(boolean @Nullable[] joinWithPrev) {
     scopesUsed = 0;
     Deque<Scope> stack = new ArrayDeque<>();
-    stack.push(newScope('B', 0, 0));
+    stack.push(newScope(Scope.Kind.BLOCK, 0, 0));
     List<Integer> pendingComments = new ArrayList<>();
     int prevIndent = 0;
     int headIndent = 0;
@@ -814,7 +814,7 @@ public final class Printer {
         indent = continuationIndent(top, firstToken, prevIndent);
       } else {
         indent = top.contentIndent;
-        if (top.kind == 'S' && firstSym != Sym.CASE && firstSym != Sym.DEFAULT) {
+        if (top.kind == Scope.Kind.SWITCH_BODY && firstSym != Sym.CASE && firstSym != Sym.DEFAULT) {
           indent += INDENT;
         }
       }
@@ -871,9 +871,12 @@ public final class Printer {
     char kind = closer == Sym.RBRACE ? '{' : closer == Sym.RPAREN ? '(' : '[';
     for (Scope s : stack) {
       boolean matches = switch (kind) {
-        case '{' -> s.kind == 'B' || s.kind == 'S' || s.kind == 'E' || s.kind == 'A';
-        case '(' -> s.kind == 'P';
-        default -> s.kind == 'K';
+        case '{' -> s.kind == Scope.Kind.BLOCK
+          || s.kind == Scope.Kind.SWITCH_BODY
+          || s.kind == Scope.Kind.ENUM_BODY
+          || s.kind == Scope.Kind.ARRAY_INIT;
+        case '(' -> s.kind == Scope.Kind.PAREN;
+        default -> s.kind == Scope.Kind.BRACKET;
       };
       if (matches) {
         return s;
@@ -892,7 +895,7 @@ public final class Printer {
       if (!top.elementOpen && !isCloser(i)) {
         top.elementOpen = true;
         top.elementStartIndent = indent;
-        top.caseLabel = top.kind == 'S'
+        top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
           && (tokenSym[i] == Sym.CASE || tokenSym[i] == Sym.DEFAULT);
       }
       analyzeToken(stack, i, indent);
@@ -908,12 +911,12 @@ public final class Printer {
 
     switch (sym) {
       case LPAREN -> {
-        Scope scope = newScope('P', indent + INDENT, indent);
+        Scope scope = newScope(Scope.Kind.PAREN, indent + INDENT, indent);
         int prev = indexOfPrevCode(i);
         scope.forParen = prev >= 0 && (tokenSym[prev] == Sym.FOR || tokenSym[prev] == Sym.TRY);
         stack.push(scope);
       }
-      case LBRACKET -> stack.push(newScope('K', indent + INDENT, indent));
+      case LBRACKET -> stack.push(newScope(Scope.Kind.BRACKET, indent + INDENT, indent));
       case LBRACE -> stack.push(openBrace(stack, i, indent));
       case RPAREN, RBRACKET -> {
         Scope closed = stack.peek();
@@ -931,7 +934,7 @@ public final class Printer {
         }
       }
       case SEMI -> {
-        if (top.kind == 'P' || top.kind == 'K') {
+        if (top.kind == Scope.Kind.PAREN || top.kind == Scope.Kind.BRACKET) {
           resetElement(top); // for-loop sections and try-with-resources
         } else {
           closeElement(top);
@@ -940,7 +943,10 @@ public final class Printer {
       case COMMA -> {
         if (
           top.generic == 0 && (
-            top.kind == 'P' || top.kind == 'K' || top.kind == 'A' || top.kind == 'E'
+            top.kind == Scope.Kind.PAREN
+              || top.kind == Scope.Kind.BRACKET
+              || top.kind == Scope.Kind.ARRAY_INIT
+              || top.kind == Scope.Kind.ENUM_BODY
           )
         ) {
           resetElement(top);
@@ -1044,20 +1050,20 @@ public final class Printer {
       default -> false;
     };
     if (arrayInit) {
-      return newScope('A', indent + INDENT, indent);
+      return newScope(Scope.Kind.ARRAY_INIT, indent + INDENT, indent);
     }
     if (top.sawSwitch && prevSym == Sym.RPAREN) {
       top.sawSwitch = false;
-      return newScope('S', indent + INDENT, indent);
+      return newScope(Scope.Kind.SWITCH_BODY, indent + INDENT, indent);
     }
     if (top.sawEnum) {
       top.sawEnum = false;
-      return newScope('E', indent + INDENT, indent);
+      return newScope(Scope.Kind.ENUM_BODY, indent + INDENT, indent);
     }
-    return newScope('B', indent + INDENT, indent);
+    return newScope(Scope.Kind.BLOCK, indent + INDENT, indent);
   }
 
-  private Scope newScope(char kind, int contentIndent, int closeIndent) {
+  private Scope newScope(Scope.Kind kind, int contentIndent, int closeIndent) {
     if (scopesUsed == scopePool.size()) {
       scopePool.add(new Scope());
     }
@@ -1070,11 +1076,11 @@ public final class Printer {
       afterContentToken(top, false);
       return;
     }
-    if (top.kind == 'P' && top.forParen) {
+    if (top.kind == Scope.Kind.PAREN && top.forParen) {
       afterContentToken(top, false); // enhanced-for colon, spaced both sides
       return;
     }
-    if (top.kind == 'S' && top.caseLabel) {
+    if (top.kind == Scope.Kind.SWITCH_BODY && top.caseLabel) {
       mark(i, Mark.COLON_NO_SPACE_BEFORE);
       closeElement(top);
       return;
@@ -1106,7 +1112,12 @@ public final class Printer {
     scope.hasContent = false;
     scope.lastWasWord = false;
     scope.annotationState = 0;
-    if (scope.kind == 'P' || scope.kind == 'K' || scope.kind == 'A' || scope.kind == 'E') {
+    if (
+      scope.kind == Scope.Kind.PAREN
+        || scope.kind == Scope.Kind.BRACKET
+        || scope.kind == Scope.Kind.ARRAY_INIT
+        || scope.kind == Scope.Kind.ENUM_BODY
+    ) {
       scope.elementOpen = false;
     }
   }
