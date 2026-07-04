@@ -63,8 +63,43 @@
     </plugins>
   </build>
 
-  <!-- Requires a GraalVM JDK with native-image on the PATH. Build: mvn -Pnative package -->
   <profiles>
+    <!--
+      Formats the whole repo in place by forking a JVM on app-cli's main.
+      Bound to a phase (not run as exec:exec directly) so it fires only for
+      app-cli and not for every module `-am` pulls into the reactor.
+    -->
+    <profile>
+      <id>format-java</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>format-java</id>
+                <phase>process-classes</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>java</executable>
+                  <arguments>
+                    <argument>-classpath</argument>
+                    <classpath />
+                    <argument>${exec.mainClass}</argument>
+                    <argument>${maven.multiModuleProjectDirectory}</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- Requires a GraalVM JDK with native-image on the PATH. Build: mvn -Pnative package -->
     <profile>
       <id>native</id>
       <build>
