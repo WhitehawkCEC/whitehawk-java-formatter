@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.3.2](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.1...0.3.2) (2026-07-04)
+
+
+### Features
+
+* **core:** add ArraySmallEnumSet ([7e8f7ff](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/7e8f7ff089db6a5d5419a8265ac4f2f3a0ee1d54))
+* **core:** insert trailing comma before an enum's terminating `;` ([4ab26f2](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/4ab26f277406cc85f868a80026664cdac991cbd6))
+* **core:** terminate enum constant list with `;` after trailing comma ([763c07a](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/763c07a0e5a97a2e92bd2fc103a5a3825075c9fa))
+
+
+### Bug Fixes
+
+* **core:** break long ternary at `?`/`:` instead of isolating a bracket ([624d118](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/624d1182ab2d740ac7fb8b6e0872354c653c7399))
+
 ## [0.3.1](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.0...0.3.1) (2026-07-04)
 
 ## [0.3.0](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.3...0.3.0) (2026-07-04)
