@@ -1,8 +1,8 @@
 Opinionated `.java` formatter with zero config.
 
-## Before/After Examples
+## Style
 
-See [Test cases](./test-integration/src/test/resources/format-cases/).
+See [Formatter Style](./docs/FORMATTER_STYLE.md).
 
 ## Usage (CLI)
 
