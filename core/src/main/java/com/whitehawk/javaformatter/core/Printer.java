@@ -97,10 +97,12 @@ final class Printer {
 
   private record Line(int firstToken, int tokenCount, int blanksBefore) {}
 
+  /// Mutable and pooled: [#analyze] runs once per wrap iteration, so scopes are recycled across
+  /// passes (see [#newScope]) instead of reallocated per bracket per pass.
   private static final class Scope {
-    final char kind; // B=block, S=switch body, E=enum body, P=paren, K=bracket, A=array initializer
-    final int contentIndent;
-    final int closeIndent;
+    char kind; // B=block, S=switch body, E=enum body, P=paren, K=bracket, A=array initializer
+    int contentIndent;
+    int closeIndent;
     int elementStartIndent;
     boolean elementOpen;
     boolean forParen;
@@ -113,17 +115,34 @@ final class Printer {
     /// most scopes never hold a ternary.
     @Nullable Deque<Integer> ternaryIndents;
     // Cast detection: content so far could be a type reference.
-    boolean typeLike = true;
+    boolean typeLike;
     boolean sawPrimitive;
     boolean hasContent;
     boolean lastWasWord;
     // Annotation-only statement tracking: 0=start, 1=expect name part, 2=after name, -1=broken.
     int annotationState;
 
-    Scope(char kind, int contentIndent, int closeIndent) {
+    Scope init(char kind, int contentIndent, int closeIndent) {
       this.kind = kind;
       this.contentIndent = contentIndent;
       this.closeIndent = closeIndent;
+      elementStartIndent = 0;
+      elementOpen = false;
+      forParen = false;
+      sawSwitch = false;
+      sawEnum = false;
+      sawAssert = false;
+      caseLabel = false;
+      generic = 0;
+      if (ternaryIndents != null) {
+        ternaryIndents.clear();
+      }
+      typeLike = true;
+      sawPrimitive = false;
+      hasContent = false;
+      lastWasWord = false;
+      annotationState = 0;
+      return this;
     }
   }
 
@@ -381,6 +400,9 @@ final class Printer {
   private final int[] prefixWidth;
   /// Multiline tokens (text block, block comment) before each index; never changes.
   private final int[] prefixMultiline;
+  /// Recycled [Scope]s: each [#analyze] pass resets [#scopesUsed] and re-inits from the front.
+  private final List<Scope> scopePool = new ArrayList<>();
+  private int scopesUsed;
 
   Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
@@ -1593,8 +1615,9 @@ final class Printer {
   /// it flags as joined onto the previous one reuses the join run's head indent, so any bracket
   /// scope opened on that line flows from the joined line rather than a continuation indent.
   private void analyze(boolean @Nullable[] joinWithPrev) {
+    scopesUsed = 0;
     Deque<Scope> stack = new ArrayDeque<>();
-    stack.push(new Scope('B', 0, 0));
+    stack.push(newScope('B', 0, 0));
     List<Integer> pendingComments = new ArrayList<>();
     int prevIndent = 0;
     int headIndent = 0;
@@ -1714,12 +1737,12 @@ final class Printer {
 
     switch (sym) {
       case LPAREN -> {
-        Scope scope = new Scope('P', indent + INDENT, indent);
+        Scope scope = newScope('P', indent + INDENT, indent);
         int prev = indexOfPrevCode(i);
         scope.forParen = prev >= 0 && (tokenSym[prev] == Sym.FOR || tokenSym[prev] == Sym.TRY);
         stack.push(scope);
       }
-      case LBRACKET -> stack.push(new Scope('K', indent + INDENT, indent));
+      case LBRACKET -> stack.push(newScope('K', indent + INDENT, indent));
       case LBRACE -> stack.push(openBrace(stack, i, indent));
       case RPAREN, RBRACKET -> {
         Scope closed = stack.peek();
@@ -1850,17 +1873,25 @@ final class Printer {
       default -> false;
     };
     if (arrayInit) {
-      return new Scope('A', indent + INDENT, indent);
+      return newScope('A', indent + INDENT, indent);
     }
     if (top.sawSwitch && prevSym == Sym.RPAREN) {
       top.sawSwitch = false;
-      return new Scope('S', indent + INDENT, indent);
+      return newScope('S', indent + INDENT, indent);
     }
     if (top.sawEnum) {
       top.sawEnum = false;
-      return new Scope('E', indent + INDENT, indent);
+      return newScope('E', indent + INDENT, indent);
     }
-    return new Scope('B', indent + INDENT, indent);
+    return newScope('B', indent + INDENT, indent);
+  }
+
+  /// The next pooled [Scope], re-initialized; grows the pool on first use of each slot.
+  private Scope newScope(char kind, int contentIndent, int closeIndent) {
+    if (scopesUsed == scopePool.size()) {
+      scopePool.add(new Scope());
+    }
+    return scopePool.get(scopesUsed++).init(kind, contentIndent, closeIndent);
   }
 
   private void analyzeColon(Deque<Scope> stack, int i, Scope top) {
