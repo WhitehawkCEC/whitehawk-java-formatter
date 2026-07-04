@@ -53,7 +53,7 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
     NulRecordSpliterator records = new NulRecordSpliterator(stdout);
     return StreamSupport
       .stream(records, false)
-      .filter((var name) -> name.endsWith(".java"))
+      .filter(TrackedJavaFilesGitCli::underSourceRoot)
       .map(workTree::resolve)
       .onClose(() -> finish(process, records, stdout));
   }
@@ -71,11 +71,22 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
     NulRecordSpliterator records = new NulRecordSpliterator(stdout);
     return StreamSupport
       .stream(records, false)
-      .filter((var name) -> name.endsWith(".java"))
+      .filter(TrackedJavaFilesGitCli::underSourceRoot)
       .map(workTree::resolve)
       // `ls-files -m` also reports deletions; skip anything no longer on disk.
       .filter(Files::exists)
       .onClose(() -> finish(process, records, stdout));
+  }
+
+  /// Restricts to `**/src/main/java/**.java` and `**/src/test/java/**.java`, where the leading
+  /// `**/` also matches the repository root. Filtered here rather than via a git pathspec because
+  /// `ls-tree` does not support wildcard pathspecs.
+  private static boolean underSourceRoot(String name) {
+    if (!name.endsWith(".java")) {
+      return false;
+    }
+    String rooted = "/" + name;
+    return rooted.contains("/src/main/java/") || rooted.contains("/src/test/java/");
   }
 
   /// Runs `git` to completion and returns its trimmed stdout, throwing on a non-zero exit.
