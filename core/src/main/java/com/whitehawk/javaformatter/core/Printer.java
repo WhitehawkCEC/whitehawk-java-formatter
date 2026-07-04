@@ -277,17 +277,22 @@ final class Printer {
     }
   }
 
-  /// Per-token roles resolved by the analysis pass, one bit per role. Tracks whether any bit was
-  /// added so a caller can skip recomputing state derived from the roles.
-  private static final class Marks {
-    private static final byte GENERIC_ANGLE = 1;
-    private static final byte WILDCARD = 2;
-    private static final byte UNARY = 4;
-    private static final byte CAST_CLOSE = 8;
-    private static final byte COLON_NO_SPACE_BEFORE = 16;
+  /// A per-token role resolved by the analysis pass.
+  private enum Mark {
+    GENERIC_ANGLE,
+    WILDCARD,
+    UNARY,
+    CAST_CLOSE,
+    COLON_NO_SPACE_BEFORE,
     /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
-    private static final byte ANGLE_SCANNED = 32;
+    ANGLE_SCANNED;
 
+    final byte bit = (byte) (1 << ordinal());
+  }
+
+  /// Per-token [Mark]s, one bit per role. Tracks whether any bit was added so a caller can skip
+  /// recomputing state derived from the roles.
+  private static final class Marks {
     private final byte[] bits;
     /// Starts true so the first [#consumeChanged] caller computes its derived state.
     private boolean changed = true;
@@ -303,63 +308,15 @@ final class Printer {
       return was;
     }
 
-    private void set(int i, byte bit) {
-      if ((bits[i] & bit) == 0) {
-        bits[i] |= bit;
+    void set(int i, Mark mark) {
+      if ((bits[i] & mark.bit) == 0) {
+        bits[i] |= mark.bit;
         changed = true;
       }
     }
 
-    private boolean has(int i, byte bit) {
-      return (bits[i] & bit) != 0;
-    }
-
-    void setGenericAngle(int i) {
-      set(i, GENERIC_ANGLE);
-    }
-
-    boolean isGenericAngle(int i) {
-      return has(i, GENERIC_ANGLE);
-    }
-
-    void setWildcard(int i) {
-      set(i, WILDCARD);
-    }
-
-    boolean isWildcard(int i) {
-      return has(i, WILDCARD);
-    }
-
-    void setUnary(int i) {
-      set(i, UNARY);
-    }
-
-    boolean isUnary(int i) {
-      return has(i, UNARY);
-    }
-
-    void setCastClose(int i) {
-      set(i, CAST_CLOSE);
-    }
-
-    boolean isCastClose(int i) {
-      return has(i, CAST_CLOSE);
-    }
-
-    void setColonNoSpaceBefore(int i) {
-      set(i, COLON_NO_SPACE_BEFORE);
-    }
-
-    boolean isColonNoSpaceBefore(int i) {
-      return has(i, COLON_NO_SPACE_BEFORE);
-    }
-
-    void setAngleScanned(int i) {
-      set(i, ANGLE_SCANNED);
-    }
-
-    boolean isAngleScanned(int i) {
-      return has(i, ANGLE_SCANNED);
+    boolean has(int i, Mark mark) {
+      return (bits[i] & mark.bit) != 0;
     }
   }
 
@@ -1180,7 +1137,7 @@ final class Printer {
     int generic = 0;
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
-      if (marks.isGenericAngle(i)) {
+      if (marks.has(i, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(i);
         continue;
       }
@@ -1298,7 +1255,7 @@ final class Printer {
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
         return -1;
       }
-      if (marks.isGenericAngle(j)) {
+      if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
@@ -1316,7 +1273,7 @@ final class Printer {
     int depth = 0;
     int generic = 0;
     for (int j = i; j <= end; j++) {
-      if (marks.isGenericAngle(j)) {
+      if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
@@ -1325,7 +1282,7 @@ final class Printer {
       } else if (
         depth == 0
           && generic == 0
-          && !marks.isWildcard(j)
+          && !marks.has(j, Mark.WILDCARD)
           && (tokenSym[j] == Sym.QUESTION || tokenSym[j] == Sym.COLON && !ops.isEmpty())
       ) {
         ops.add(j);
@@ -1462,7 +1419,7 @@ final class Printer {
     int generic = 0;
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
-      if (marks.isGenericAngle(i)) {
+      if (marks.has(i, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(i);
         continue;
       }
@@ -1676,7 +1633,7 @@ final class Printer {
   /// level past the previous line for `?`, aligned with the matching `?` for `:`.
   private int continuationIndent(Scope top, int firstToken, int prevIndent) {
     Sym sym = tokenSym[firstToken];
-    if (sym == Sym.QUESTION && !marks.isWildcard(firstToken)) {
+    if (sym == Sym.QUESTION && !marks.has(firstToken, Mark.WILDCARD)) {
       return prevIndent + INDENT;
     }
     if (sym == Sym.COLON && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
@@ -1750,7 +1707,7 @@ final class Printer {
           stack.pop();
         }
         if (sym == Sym.RPAREN && isCast(closed, i)) {
-          marks.setCastClose(i);
+          marks.set(i, Mark.CAST_CLOSE);
         }
         afterContentToken(stack.peek(), sym == Sym.RBRACKET); // `]` can end an array type in a cast
       }
@@ -1776,21 +1733,21 @@ final class Printer {
         }
       }
       case LT -> {
-        if (!marks.isGenericAngle(i) && !marks.isAngleScanned(i)) {
-          marks.setAngleScanned(i);
+        if (!marks.has(i, Mark.GENERIC_ANGLE) && !marks.has(i, Mark.ANGLE_SCANNED)) {
+          marks.set(i, Mark.ANGLE_SCANNED);
           int end = typeArgumentsEnd(i);
           if (end >= 0) {
             markTypeArguments(i, end);
           }
         }
-        if (marks.isGenericAngle(i)) {
+        if (marks.has(i, Mark.GENERIC_ANGLE)) {
           top.generic++;
         } else {
           afterContentToken(top, false);
         }
       }
       case GT, GT_GT, GT_GT_GT -> {
-        if (marks.isGenericAngle(i)) {
+        if (marks.has(i, Mark.GENERIC_ANGLE)) {
           top.generic = Math.max(0, top.generic + angleDepthDelta(i));
         } else {
           afterContentToken(top, false);
@@ -1798,7 +1755,7 @@ final class Printer {
       }
       case QUESTION -> {
         if (top.generic > 0) {
-          marks.setWildcard(i);
+          marks.set(i, Mark.WILDCARD);
         } else {
           if (top.ternaryIndents == null) {
             top.ternaryIndents = new ArrayDeque<>();
@@ -1810,7 +1767,7 @@ final class Printer {
       case COLON -> analyzeColon(stack, i, top);
       case PLUS, MINUS, INCREMENT, DECREMENT, BANG, TILDE -> {
         if (isUnaryPosition(i)) {
-          marks.setUnary(i);
+          marks.set(i, Mark.UNARY);
         }
         afterContentToken(top, false);
       }
@@ -1905,7 +1862,7 @@ final class Printer {
       return;
     }
     if (top.kind == 'S' && top.caseLabel) {
-      marks.setColonNoSpaceBefore(i);
+      marks.set(i, Mark.COLON_NO_SPACE_BEFORE);
       closeElement(top);
       return;
     }
@@ -1913,7 +1870,7 @@ final class Printer {
       afterContentToken(top, false);
       return;
     }
-    marks.setColonNoSpaceBefore(i); // labeled statement
+    marks.set(i, Mark.COLON_NO_SPACE_BEFORE); // labeled statement
     closeElement(top);
   }
 
@@ -2014,7 +1971,7 @@ final class Printer {
       };
     }
     if (prevSym == Sym.RPAREN) {
-      return marks.isCastClose(prevIndex);
+      return marks.has(prevIndex, Mark.CAST_CLOSE);
     }
     return switch (prevSym) {
       case RBRACKET, INCREMENT, DECREMENT -> false;
@@ -2094,11 +2051,11 @@ final class Printer {
   }
 
   private void markTypeArguments(int open, int end) {
-    marks.setGenericAngle(open);
+    marks.set(open, Mark.GENERIC_ANGLE);
     for (int i = open + 1; i <= end; i++) {
       switch (tokenSym[i]) {
-        case LT, GT, GT_GT, GT_GT_GT -> marks.setGenericAngle(i);
-        case QUESTION -> marks.setWildcard(i);
+        case LT, GT, GT_GT, GT_GT_GT -> marks.set(i, Mark.GENERIC_ANGLE);
+        case QUESTION -> marks.set(i, Mark.WILDCARD);
         default -> {}
       }
     }
@@ -2227,7 +2184,7 @@ final class Printer {
       return false;
     }
     // A case-label or labeled-statement colon keeps its statement on the next line.
-    return !(prevLast == Sym.COLON && marks.isColonNoSpaceBefore(prevLastIndex));
+    return !(prevLast == Sym.COLON && marks.has(prevLastIndex, Mark.COLON_NO_SPACE_BEFORE));
   }
 
   private int lastTokenIndex(int li) {
@@ -2361,32 +2318,32 @@ final class Printer {
     if (prevSym == Sym.ARROW || nextSym == Sym.ARROW) {
       return true;
     }
-    if (marks.isUnary(nextIndex)) {
+    if (marks.has(nextIndex, Mark.UNARY)) {
       return spaceBeforePrefix(prevIndex);
     }
-    if (marks.isUnary(prevIndex)) {
+    if (marks.has(prevIndex, Mark.UNARY)) {
       return false;
     }
-    if (marks.isCastClose(prevIndex)) {
+    if (marks.has(prevIndex, Mark.CAST_CLOSE)) {
       return true;
     }
     // Generic angle brackets bind tightly; a space follows only a list-closing `>` before a word.
-    if (marks.isGenericAngle(nextIndex)) {
+    if (marks.has(nextIndex, Mark.GENERIC_ANGLE)) {
       // Type-parameter declarations keep a space after the modifier: `public <T> T get(..)`.
       return nextSym == Sym.LT && hasClass(prevIndex, Classification.MODIFIER);
     }
-    if (marks.isGenericAngle(prevIndex)) {
+    if (marks.has(prevIndex, Mark.GENERIC_ANGLE)) {
       return prevSym != Sym.LT
         && (next.kind() != Kind.PUNCT || nextSym == Sym.LBRACE || nextSym == Sym.AT);
     }
-    if (marks.isWildcard(prevIndex)) {
+    if (marks.has(prevIndex, Mark.WILDCARD)) {
       return next.kind() != Kind.PUNCT;
     }
-    if (marks.isWildcard(nextIndex)) {
+    if (marks.has(nextIndex, Mark.WILDCARD)) {
       return true; // after `<` or `,`; `<` was handled above
     }
     if (nextSym == Sym.COLON) {
-      return !marks.isColonNoSpaceBefore(nextIndex);
+      return !marks.has(nextIndex, Mark.COLON_NO_SPACE_BEFORE);
     }
     if (prevSym == Sym.COLON) {
       return true;
@@ -2404,7 +2361,7 @@ final class Printer {
       return hasClass(prevIndex, Classification.PAREN_KEYWORD)
         || prevSym == Sym.DO
         || prevSym == Sym.ELSE
-        || hasClass(prevIndex, Classification.BINARY_OPERATOR) && !marks.isGenericAngle(prevIndex)
+        || hasClass(prevIndex, Classification.BINARY_OPERATOR) && !marks.has(prevIndex, Mark.GENERIC_ANGLE)
         || prevSym == Sym.SEMI
         || prevSym == Sym.COMMA;
     }
@@ -2450,7 +2407,7 @@ final class Printer {
     ) {
       return false;
     }
-    if (marks.isUnary(prevIndex)) {
+    if (marks.has(prevIndex, Mark.UNARY)) {
       // Keep `- -x` apart so it cannot re-lex as `--`.
       return prevSym == Sym.PLUS || prevSym == Sym.MINUS;
     }
