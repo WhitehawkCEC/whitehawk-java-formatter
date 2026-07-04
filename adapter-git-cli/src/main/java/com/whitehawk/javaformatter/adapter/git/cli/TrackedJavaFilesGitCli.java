@@ -1,6 +1,6 @@
 package com.whitehawk.javaformatter.adapter.git.cli;
 
-import com.whitehawk.javaformatter.core.TrackedJavaFiles;
+import com.whitehawk.javaformatter.core.input.TrackedJavaFiles;
 
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.NullMarked;

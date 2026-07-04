@@ -1,7 +1,7 @@
 package com.whitehawk.javaformatter.app.cli;
 
 import com.whitehawk.javaformatter.core.Formatter;
-import com.whitehawk.javaformatter.core.TrackedJavaFiles;
+import com.whitehawk.javaformatter.core.input.TrackedJavaFiles;
 import io.avaje.inject.BeanScope;
 import io.avaje.inject.External;
 

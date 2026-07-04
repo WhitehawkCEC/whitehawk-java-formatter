@@ -1,4 +1,4 @@
-package com.whitehawk.javaformatter.core;
+package com.whitehawk.javaformatter.core.input;
 
 import org.jspecify.annotations.NullMarked;
 

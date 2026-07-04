@@ -1,6 +1,6 @@
 package com.whitehawk.javaformatter.app.maven;
 
-import com.whitehawk.javaformatter.core.TrackedJavaFiles;
+import com.whitehawk.javaformatter.core.input.TrackedJavaFiles;
 
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
