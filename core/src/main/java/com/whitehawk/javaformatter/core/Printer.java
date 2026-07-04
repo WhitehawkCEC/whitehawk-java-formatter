@@ -956,8 +956,13 @@ final class Printer {
   /// chain the surrounding group already lays out multiline, so its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = dot - 1; o >= 0; o--) {
-      if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
+      Token t = tokens.get(o);
+      if (t.is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
         return true;
+      }
+      // A group closed before `dot` cannot enclose the call: skip its contents whole.
+      if ((t.is(")") || t.is("]") || t.is("}")) && matchOpen[o] >= 0) {
+        o = matchOpen[o];
       }
     }
     return false;
