@@ -416,6 +416,17 @@ public final class Printer {
         continue;
       }
       Line line = lines.get(li);
+      // A too-long line whose base-depth structure is a ternary breaks at `?`/`:` rather than
+      // isolating a bracket group nested in its condition.
+      List<Integer> ternary = topLevelTernaryOperators(line.firstToken(), line.firstToken() + line.tokenCount() - 1);
+      if (!ternary.isEmpty() && !breakBefore[ternary.get(0)]) {
+        for (int b : ternary) {
+          breakBefore[b] = true;
+          forcedBreak[b] = true;
+        }
+        changed = true;
+        continue;
+      }
       int open = -1;
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
