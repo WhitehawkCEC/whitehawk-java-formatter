@@ -15,29 +15,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/// Renders a token stream back to source. Line breaks are normalized: a bracket group that spans
-/// more than one input line has its opener and closer isolated on their own lines (and each of a
-/// paren group's top-level comma-separated elements then starts its own line), and a method
-/// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
-/// call (and each broken call whose arguments fit collapses back onto its own line), and a string
-/// concatenation the input broke before a `+` of keeps that break, and a `&&`/`||` the input broke
-/// before keeps that break and spreads it to the element's other operators of the same text. A
-/// break directly after `=` moves into the right-hand side instead: a ternary breaks before its
-/// `?` and `:`, a chain of two or more calls breaks before every call, and anything else rejoins
-/// its assignment and is wrapped like any long line. A
-/// line wider
-/// than the line limit is wrapped the same way: its last outermost bracket
-/// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
-/// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
-/// joined back onto one line when it fits within the line limit. A control-flow body without
-/// braces (`if`/`else`/`for`/`while`/`do`) gets a block inserted around it. An empty bracket
-/// group the input split across lines collapses back onto one line (`{\n}` becomes `{}`). A
-/// single-type or
-/// single-member import whose name is referenced nowhere else (code or comment) is dropped;
-/// wildcard imports are kept. Everything else is recomputed too:
-/// indentation, spacing between tokens on a line, blank-line counts (runs collapse to one; none
-/// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
-/// newline).
+/// Renders a token stream back to source under a canonical style. Line breaks largely follow
+/// what the input already did — a bracket group the input split stays split, one it kept together
+/// may be re-joined — so output is stabilized rather than reflowed from scratch, keeping diffs
+/// small and idempotent.
 @NullMarked
 public final class Printer {
   private static final int INDENT = 2;
@@ -49,46 +30,33 @@ public final class Printer {
 
   private final List<Token> tokens;
   private final List<Line> lines = new ArrayList<>();
-  /// Per-token [Mark]s, one bit per role.
   private final ArraySmallEnumSet<Mark> marks;
-  /// Whether a [Mark] was added since [#consumeMarksChanged], so a caller can skip recomputing
-  /// state derived from the roles. Starts true so the first caller computes its derived state.
+  /// Starts true so the first pass computes the state derived from the marks.
   private boolean marksChanged = true;
   private int[] lineIndent;
-  /// True where a line break must precede the token; seeded from input newlines, then normalized.
   private final boolean[] breakBefore;
-  /// True where the break was forced by canonical style (bracket isolation, chain breaks); such
-  /// breaks are never joined away.
+  /// A forced break (bracket isolation, chain breaks) is never joined away.
   private final boolean[] forcedBreak;
-  /// Input line index per token (blank lines ignored), used to decide what "spans multiple lines".
+  /// Blank lines are ignored, so equal values mean two tokens shared an input line.
   private final int[] tokenLine;
-  /// Matching-bracket index per token: `matchClose` at each opener, `matchOpen` at each closer;
-  /// -1 elsewhere and at unbalanced brackets.
+  /// `matchClose` at each opener, `matchOpen` at each closer; -1 elsewhere and at unbalanced brackets.
   private final int[] matchOpen;
   private final int[] matchClose;
-  /// Innermost opener whose group is still open at each token (at a closer, the opener it
-  /// closes); -1 at top level. Walking these indices climbs the enclosing groups.
+  /// At a closer, the opener it closes; -1 at top level.
   private final int[] enclosingOpen;
-  /// Output width per token, or -1 for a multiline token (text block, block comment).
+  /// -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
-  /// Classes of each token's text, resolved once.
   private final ArraySmallEnumSet<Classification> tokenClasses;
-  /// Dispatch symbol of each token's text, resolved once.
   private final Sym[] tokenSym;
-  /// Whether a space separates each token from its predecessor when they share a line. Depends
-  /// only on tokens and marks, so it is recomputed only by an [#analyze] pass that added a mark
-  /// bit; later passes reuse it for width checks and emit.
+  /// Recomputed only by an [#analyze] pass that added a mark bit; later passes reuse it.
   private final boolean[] spaceBefore;
-  /// Opener-stack scratch for [#breakGroupElements], allocated once: the pass re-runs every
-  /// iteration of the wrap loop.
+  /// Allocated once because the pass re-runs every wrap iteration.
   private final int[] openerStack;
-  /// Prefix sums making any token range's width check O(1): `prefixWidth[i]` is the one-line
-  /// width of tokens `0..i-1`, each preceded by its separating space and a multiline token
-  /// counting as zero width (see [#runWidth]). Rebuilt whenever [#spaceBefore] is.
+  /// Prefix sums giving any range's width in O(1); a multiline token counts as zero width.
+  /// Rebuilt whenever [#spaceBefore] is.
   private final int[] prefixWidth;
-  /// Multiline tokens (text block, block comment) before each index; never changes.
   private final int[] prefixMultiline;
-  /// Recycled [Scope]s: each [#analyze] pass resets [#scopesUsed] and re-inits from the front.
+  /// Recycled across [#analyze] passes instead of reallocated per bracket per pass.
   private final List<Scope> scopePool = new ArrayList<>();
   private int scopesUsed;
 
@@ -127,24 +95,20 @@ public final class Printer {
     return tokenClasses.has(i, cls);
   }
 
-  /// Adds `mark` to the token at `i`, tracking whether any bit was newly added.
   private void mark(int i, Mark mark) {
     marksChanged |= marks.set(i, mark);
   }
 
-  /// Whether a [Mark] was added since the previous call.
   private boolean consumeMarksChanged() {
     boolean was = marksChanged;
     marksChanged = false;
     return was;
   }
 
-  /// The token at `i` is `(`, `[`, or `{`.
   private boolean isOpener(int i) {
     return hasClass(i, Classification.OPENER);
   }
 
-  /// The token at `i` is `)`, `]`, or `}`.
   private boolean isCloser(int i) {
     return hasClass(i, Classification.CLOSER);
   }
@@ -166,11 +130,10 @@ public final class Printer {
     }
   }
 
-  /// Drops each single-type or single-member import whose imported simple name appears nowhere
-  /// else in the file — neither in code nor in comment text (so a `{@link Foo}` javadoc reference
-  /// keeps its import). Wildcard imports (`a.b.*`, `static a.b.*`) are always kept: the names they
-  /// contribute cannot be resolved from tokens alone. A removed import's leading blank line, if
-  /// any, is carried onto whatever follows so import-group spacing survives.
+  /// A name mentioned only in a comment (e.g. a javadoc `{@link Foo}`) still counts as used.
+  /// Wildcard imports are always kept: the names they contribute can't be resolved from tokens
+  /// alone. A dropped import's leading blank line carries onto what follows so group spacing
+  /// survives.
   private static List<Token> removeUnusedImports(List<Token> in) {
     int n = in.size();
     List<int[]> imports = new ArrayList<>(); // {importIndex, semicolonIndex}
@@ -191,7 +154,6 @@ public final class Printer {
       return in;
     }
 
-    // Simple names referenced anywhere outside an import statement, in code or in comment text.
     Set<String> used = new HashSet<>();
     int imp = 0;
     for (int i = 0; i < n; i++) {
@@ -250,8 +212,6 @@ public final class Printer {
     return out;
   }
 
-  /// Adds every Java-identifier-shaped word in `text` to `used`, so a comment that names a type
-  /// (a javadoc `{@link}`/`@see`, or a plain mention) is treated as a use of its import.
   private static void addIdentifierWords(Set<String> used, String text) {
     int len = text.length();
     for (int i = 0; i < len;) {
@@ -268,10 +228,7 @@ public final class Printer {
     }
   }
 
-  /// Canonical style gives every implicit lambda parameter a `var`: an unparenthesized `x ->`
-  /// becomes `(var x) ->`, and a parenthesized untyped list `(x, y) ->` becomes
-  /// `(var x, var y) ->`. Parameters that already carry a type (or `var`) and switch-arrow labels
-  /// (`case X ->`) are left untouched.
+  /// Canonical style gives every implicit lambda parameter an explicit `var`.
   private static List<Token> expandLambdaParams(List<Token> in) {
     int n = in.size();
     boolean[] wrap = new boolean[n]; // bare param: wrap in `(var ...)`
@@ -329,8 +286,6 @@ public final class Printer {
     return out;
   }
 
-  /// True when `in[i]` is a bare (unparenthesized) single lambda parameter: a non-keyword
-  /// identifier immediately followed by `->`, not reached from a `case` label.
   private static boolean isBareLambdaParam(List<Token> in, int i) {
     Token t = in.get(i);
     if (t.kind() != Kind.IDENT || t.isKeyword()) {
@@ -368,10 +323,6 @@ public final class Printer {
     return true;
   }
 
-  /// If the parenthesized list `open`..`close` is a non-empty implicit lambda parameter list
-  /// (every element a lone non-keyword identifier, so no explicit type and no `var`), returns
-  /// those identifier indices; otherwise null. Typed lists, existing `var`, empty `()`, and
-  /// record-deconstruction patterns all fail the lone-identifier test.
   private static @Nullable List<Integer> implicitParamIdents(List<Token> in, int open, int close) {
     List<Integer> idents = new ArrayList<>();
     int elementTokens = 0;
@@ -401,8 +352,7 @@ public final class Printer {
     return idents;
   }
 
-  /// Matching `(` index per `)` in one forward pass (parens only, all a lambda list can nest in);
-  /// -1 at unmatched closers.
+  /// Parens only — all a lambda parameter list can nest in.
   private static int[] matchOpenParens(List<Token> in) {
     int n = in.size();
     int[] open = new int[n];
@@ -438,11 +388,7 @@ public final class Printer {
     return -1;
   }
 
-  /// Canonical style braces every control-flow body: a `if`/`else`/`for`/`while`/`do` whose
-  /// controlled statement is not already a block gets a `{` before it and a `}` after it (an
-  /// `else if` keeps its unbraced `if`, and an empty `;` body is left alone). The controlled
-  /// statement is forced onto its own line so the inserted block is isolated by the normal
-  /// multiline-bracket rule.
+  /// Canonical style braces every control-flow body (`if`/`else`/`for`/`while`/`do`).
   private static List<Token> insertMissingBraces(List<Token> in) {
     int n = in.size();
     int[] close = matchAllBrackets(in);
@@ -484,8 +430,7 @@ public final class Printer {
     return applyWraps(in, wraps);
   }
 
-  /// Rebuilds the token list with a synthetic `{`/`}` around each wrap's controlled statement.
-  /// The inserted braces are indistinguishable, so only their count per token matters.
+  /// Inserted braces are indistinguishable, so only their count per token is tracked.
   private static List<Token> applyWraps(List<Token> in, List<int[]> wraps) {
     int n = in.size();
     int[] opensAt = new int[n];
@@ -519,9 +464,6 @@ public final class Printer {
     return out;
   }
 
-  /// Index of the last token of the statement starting at `start` (inclusive): a block ends at its
-  /// `}`; a nested `if`/`for`/`while`/`do` ends at its own controlled statement (and an `if` at its
-  /// `else` branch); everything else ends at the next `;` outside any bracket group.
   private static int statementEnd(List<Token> in, int[] close, int start) {
     Token t = in.get(start);
     if (t.is("{")) {
@@ -570,8 +512,6 @@ public final class Printer {
     return scanToSemicolon(in, close, start);
   }
 
-  /// Index of the first `;` at or after `from` that is not nested inside a bracket group, or the
-  /// last token when none is found.
   private static int scanToSemicolon(List<Token> in, int[] close, int from) {
     for (int j = from; j < in.size(); j++) {
       Token t = in.get(j);
@@ -584,8 +524,6 @@ public final class Printer {
     return in.size() - 1;
   }
 
-  /// Matching closer index per opener (`(`/`[`/`{`); -1 at every other token and at unbalanced
-  /// openers.
   private static int[] matchAllBrackets(List<Token> in) {
     int n = in.size();
     int[] mc = new int[n];
@@ -603,8 +541,6 @@ public final class Printer {
     return mc;
   }
 
-  /// Seeds [#breakBefore] from input line terminators, then forces the breaks canonical style
-  /// requires around multiline brackets and method chains.
   private void computeBreaks() {
     int n = tokens.size();
     int line = 0;
@@ -650,7 +586,6 @@ public final class Printer {
     }
   }
 
-  /// Breaks before every `.name(` call in each method chain that spans more than one input line.
   private void forceChainBreaks() {
     int n = tokens.size();
     int[] nextCall = new int[n];
@@ -691,8 +626,6 @@ public final class Printer {
     }
   }
 
-  /// Whether the `)` at `closeIndex` closes an annotation's argument list: its matching `(`
-  /// follows an annotation name (`@Name` or `@a.b.Name`).
   private boolean closesAnnotation(int closeIndex) {
     int open = matchOpen[closeIndex];
     if (open < 0) {
@@ -718,7 +651,6 @@ public final class Printer {
     return false;
   }
 
-  /// A `.` that begins a method call: `. name (`.
   private boolean isCallDot(int p) {
     if (tokenSym[p] != Sym.DOT) {
       return false;
@@ -731,8 +663,7 @@ public final class Printer {
     return paren >= 0 && tokenSym[paren] == Sym.LPAREN;
   }
 
-  /// Preserves an intentionally wrapped string concatenation: a `+` the input already broke before
-  /// and that joins a string literal keeps its break, so a piecewise-built literal (e.g. a regex
+  /// Keeps an already-broken string-concatenation `+`, so a piecewise-built literal (e.g. a regex
   /// split across lines) is not collapsed back onto one line.
   private void forceConcatBreaks() {
     for (int i = 0; i < tokens.size(); i++) {
@@ -742,8 +673,6 @@ public final class Printer {
     }
   }
 
-  /// A binary `+` that concatenates a string: one operand is a string or text-block literal and the
-  /// token before it ends an operand (so it is not a unary sign).
   private boolean isStringConcatPlus(int i) {
     if (tokenSym[i] != Sym.PLUS) {
       return false;
@@ -756,9 +685,8 @@ public final class Printer {
     return isStringLiteral(prev) || isStringLiteral(next);
   }
 
-  /// A `&&`/`||` the input broke before keeps its break, and the break spreads to every operator
-  /// with the same text in the same element (same bracket depth), so a condition wrapped at one
-  /// operand wraps at every operand of that precedence.
+  /// An already-broken `&&`/`||` spreads its break to every same-text operator in the element, so
+  /// a condition wrapped at one operand wraps at every operand of that precedence.
   private void forceLogicalBreaks() {
     // An operator reached by an earlier operator's spread needs no scan of its own: the spread
     // already covered every same-text operator of the element.
@@ -793,8 +721,6 @@ public final class Printer {
     }
   }
 
-  /// Bounds the element scan of [#forceLogicalBreaks]: any bracket still unskipped (the enclosing
-  /// group's edge or an unmatched one) or a separator ending the operand run.
   private boolean endsOperatorElement(int i) {
     return isOpener(i) || isCloser(i) || switch (tokenSym[i]) {
       case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
@@ -827,9 +753,8 @@ public final class Printer {
     }
   }
 
-  /// Re-derives [#lines] from the current breaks. [#lineIndent] is reused when it still fits —
-  /// the next [#analyze] pass reassigns every line's entry — and grows only when the line count
-  /// outgrows it.
+  /// [#lineIndent] is reused when it still fits (the next [#analyze] reassigns every entry) and
+  /// grown only when the line count outgrows it.
   private void rebuildLines() {
     lines.clear();
     buildLines();
@@ -870,9 +795,7 @@ public final class Printer {
     return emit(joinWithPrev);
   }
 
-  /// Every top-level element of a multiline paren group starts on its own line: forces a break
-  /// after each top-level comma of a group whose opener is isolated. Commas nested in inner
-  /// brackets or generic type-argument lists don't count. Returns whether any break was added.
+  /// Canonical style starts every top-level element of a multiline paren group on its own line.
   private boolean breakGroupElements() {
     boolean changed = false;
     // A marked type-argument list never contains `(`, so any angle open at a comma opened after
@@ -908,11 +831,9 @@ public final class Printer {
     return changed;
   }
 
-  /// Forces breaks that wrap each line wider than [#MAX_WIDTH]: the last bracket group on the
-  /// line that is outermost within it and non-empty gets its opener and closer isolated, the same
-  /// shape as a group that was already multiline in the input. Returns whether any break was
-  /// added; the caller then re-derives lines and indents and tries again, so a remainder that is
-  /// still too wide wraps at its next group.
+  /// Wraps each line wider than [#MAX_WIDTH] by isolating its last outermost non-empty bracket
+  /// group. One group per pass: the caller re-derives lines and retries, so a still-too-wide
+  /// remainder wraps at its next group.
   private boolean wrapLongLines() {
     boolean changed = false;
     for (int li = 0; li < lines.size(); li++) {
@@ -948,12 +869,8 @@ public final class Printer {
     return changed;
   }
 
-  /// Moves each soft input break directly after an `=` into the right-hand side, which canonical
-  /// style breaks at its own structure instead: a side holding a top-level ternary breaks before
-  /// its `?` and `:`, one holding a chain of two or more calls breaks before every call, and any
-  /// other side rejoins its assignment — when the joined line fits, or when isolating its last
-  /// bracket group leaves a fitting head line for the long-line wrap. A side that already spans
-  /// lines keeps its existing breaks. Returns whether any break changed.
+  /// A soft break directly after `=` is never canonical: the right-hand side breaks at its own
+  /// structure (ternary, call chain) instead, or rejoins the assignment when it fits.
   private boolean moveAssignmentBreaks() {
     boolean changed = false;
     for (int i = 1; i < tokens.size(); i++) {
@@ -984,9 +901,8 @@ public final class Printer {
     return changed;
   }
 
-  /// Index of the last token of the right-hand side starting at `i`: the token before the next
-  /// `;` or `,` at the side's own depth or before the closer of an enclosing group. Returns -1
-  /// when the side spans lines or holds a multiline token, and cannot be re-wrapped from scratch.
+  /// Returns -1 when the side already spans lines or holds a multiline token: it cannot be
+  /// re-wrapped from scratch.
   private int rhsEnd(int i) {
     int depth = 0;
     int generic = 0;
@@ -1009,8 +925,6 @@ public final class Printer {
     return tokens.size() - 1;
   }
 
-  /// The `?` and `:` operators of the conditionals at the top level of `i..end` — bracket depth
-  /// zero, outside type arguments — or an empty list when the range holds no conditional.
   private List<Integer> topLevelTernaryOperators(int i, int end) {
     List<Integer> ops = new ArrayList<>();
     int depth = 0;
@@ -1034,8 +948,6 @@ public final class Printer {
     return ops;
   }
 
-  /// The call dots of the method chain at the top level of `i..end`: the first `.name(` at
-  /// bracket depth zero and every call linked directly onto the previous call's result.
   private List<Integer> topLevelChainDots(int i, int end) {
     int dot = -1;
     for (int j = i; j <= end && dot < 0; j++) {
@@ -1057,9 +969,6 @@ public final class Printer {
     return dots;
   }
 
-  /// Whether clearing the break at `i` (a line-starting token) still lets the output fit: the
-  /// joined line stays within the limit, or the long-line wrap can isolate the joined line's last
-  /// outermost bracket group and leave a fitting head line.
   private boolean joinAllowsWrap(int i) {
     int li = lineIndexOf(i);
     if (hasMultilineToken(li - 1, li)) {
@@ -1091,15 +1000,9 @@ public final class Printer {
     return lineIndent[li - 1] + runWidth(start, open + 1) <= MAX_WIDTH;
   }
 
-  /// Collapses the argument paren of a broken method chain's call when the whole call — from its
-  /// `.` through the closing `)` — fits on one line. Canonical chain-breaking re-lays every call
-  /// onto its own line, so an argument list the input happened to wrap rejoins rather than staying
-  /// isolated (`.get(\n  "x"\n)` becomes `.get("x")`). A call whose arguments carry a brace group
-  /// (a block, lambda body, or array initializer) is left broken so that group keeps its own
-  /// lines. A call with more than one argument, one whose chain is itself nested in a broken
-  /// paren group (e.g. a builder chain passed as an argument), or one whose argument is itself a
-  /// broken multi-argument call (`.isEqualTo(Map.of(\n  ...\n))`) keeps its arguments broken too.
-  /// Returns whether any break was removed.
+  /// Canonical chain-breaking already re-lays every call onto its own line, so an argument list
+  /// the input happened to wrap rejoins (`.get(\n  "x"\n)` becomes `.get("x")`) rather than
+  /// staying isolated. The exclusions below each preserve a group that must keep its own lines.
   private boolean collapseChainCallArguments() {
     boolean changed = false;
     boolean[] multiArg = null;
@@ -1142,8 +1045,6 @@ public final class Printer {
     return changed;
   }
 
-  /// Whether a `{` sits strictly inside `open..close` — a block, lambda body, or array
-  /// initializer whose group keeps its own lines.
   private boolean hasBraceInside(int open, int close) {
     for (int i = open + 1; i < close; i++) {
       if (tokenSym[i] == Sym.LBRACE) {
@@ -1153,10 +1054,8 @@ public final class Printer {
     return false;
   }
 
-  /// Whether each opener's group separates more than one element: true at an opener holding a
-  /// comma at its own depth (not one nested in an inner bracket or a generic type-argument list).
-  /// One pass over all tokens, attributing each comma to its innermost enclosing opener, replaces
-  /// a rescan of every argument list per collapse candidate.
+  /// One pass attributing each comma to its innermost opener, versus a rescan per collapse
+  /// candidate.
   private boolean[] computeMultiArgParens() {
     boolean[] multiArg = new boolean[tokens.size()];
     int generic = 0;
@@ -1177,9 +1076,8 @@ public final class Printer {
     return multiArg;
   }
 
-  /// Whether the call at `dot` (closing at `close`) sits inside a broken paren group — a `(` whose
-  /// closer is isolated on its own line and that encloses the whole call. Such a call belongs to a
-  /// chain the surrounding group already lays out multiline, so its arguments stay broken.
+  /// Such a call belongs to a chain the surrounding broken group already lays out multiline, so
+  /// its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = enclosingOpen[dot]; o >= 0; o = enclosingOpen[o]) {
       if (tokenSym[o] == Sym.LPAREN && matchClose[o] > close && breakBefore[matchClose[o]]) {
@@ -1189,9 +1087,8 @@ public final class Printer {
     return false;
   }
 
-  /// Whether the argument list `(open..close)` wraps a call that is itself broken across lines and
-  /// carries more than one argument (`Map.of(\n  "a",\n  "b"\n)`). Collapsing the outer call would
-  /// flatten that inner call too, so its break is kept.
+  /// Collapsing the outer call would flatten a broken multi-argument inner call
+  /// (`Map.of(\n  "a",\n  "b"\n)`) too, so the outer break is kept.
   private boolean containsBrokenMultiArgCall(int open, int close, boolean[] multiArg) {
     for (int i = open + 1; i < close; i++) {
       if (tokenSym[i] == Sym.LPAREN && breakBefore[matchClose[i]] && multiArg[i]) {
@@ -1201,11 +1098,8 @@ public final class Printer {
     return false;
   }
 
-  /// Collapses each control-flow condition paren (`if`, `while`, `for`, `switch`, `catch`,
-  /// `synchronized`, `try`) that was isolated because it spanned multiple input lines but whose
-  /// whole header — from the keyword's line start through the opening `{` — fits on one line.
-  /// Reverses the forced opener/closer/element breaks that a soft join cannot cross. Returns
-  /// whether any break was removed.
+  /// Reverses the forced breaks isolating a control-flow condition paren when the whole header
+  /// fits on one line — an unwind a soft join cannot do because it never crosses a forced break.
   private boolean collapseControlFlowHeaders() {
     boolean changed = false;
     for (int open = 0; open < tokens.size(); open++) {
@@ -1243,8 +1137,6 @@ public final class Printer {
     return changed;
   }
 
-  /// Whether the paren group `open`..`close` holds a `;` directly at its top level (not nested in
-  /// an inner bracket) — a try-with-resources separator between multiple resources.
   private boolean hasTopLevelSemicolon(int open, int close) {
     int depth = 0;
     for (int i = open + 1; i < close; i++) {
@@ -1259,8 +1151,6 @@ public final class Printer {
     return false;
   }
 
-  /// Angle-bracket depth change of the angle token at `i`: +1 for `<`; -1, -2, -3 for `>`, `>>`,
-  /// `>>>`; 0 for any other token.
   private int angleDepthDelta(int i) {
     return switch (tokenSym[i]) {
       case LT -> 1;
@@ -1289,15 +1179,13 @@ public final class Printer {
     return -1;
   }
 
-  /// One-line width of tokens `first..endExclusive-1`, excluding any space before `first`. A
-  /// multiline token counts as zero width: callers rule those out via [#hasMultilineToken] or
-  /// [#prefixMultiline] first.
+  /// A multiline token counts as zero width, so callers must rule those out (via
+  /// [#hasMultilineToken] or [#prefixMultiline]) before trusting the result.
   private int runWidth(int first, int endExclusive) {
     return prefixWidth[endExclusive] - prefixWidth[first] - (spaceBefore[first] ? 1 : 0);
   }
 
-  /// Output width of line `li`, or 0 when it contains a multiline token (text block, block
-  /// comment) and cannot be usefully measured or wrapped.
+  /// 0 when the line holds a multiline token, which cannot be usefully measured or wrapped.
   private int lineWidth(int li) {
     Line line = lines.get(li);
     int end = line.firstToken() + line.tokenCount();
@@ -1311,9 +1199,8 @@ public final class Printer {
   // Analysis: scope tracking, line indents, token roles.
   // ---------------------------------------------------------------------------------------------
 
-  /// Assigns each line its indent and updates token roles. When `joinWithPrev` is non-null, a line
-  /// it flags as joined onto the previous one reuses the join run's head indent, so any bracket
-  /// scope opened on that line flows from the joined line rather than a continuation indent.
+  /// A line `joinWithPrev` flags reuses the join run's head indent, so a bracket scope opened on
+  /// it flows from the joined line rather than a discarded continuation indent.
   private void analyze(boolean @Nullable[] joinWithPrev) {
     scopesUsed = 0;
     Deque<Scope> stack = new ArrayDeque<>();
@@ -1371,9 +1258,7 @@ public final class Printer {
     }
   }
 
-  /// Indent of a wrapped element's continuation line, normally one level past the element start.
-  /// A ternary's branch lines sit one level past the line holding the end of its condition — one
-  /// level past the previous line for `?`, aligned with the matching `?` for `:`.
+  /// A ternary's `:` aligns with its matching `?` rather than taking the usual continuation indent.
   private int continuationIndent(Scope top, int firstToken, int prevIndent) {
     Sym sym = tokenSym[firstToken];
     if (sym == Sym.QUESTION && !marks.has(firstToken, Mark.WILDCARD)) {
@@ -1394,8 +1279,7 @@ public final class Printer {
     return true;
   }
 
-  /// The scope a closing token returns to: normally the top of the stack; on unbalanced input,
-  /// the innermost scope of the matching kind.
+  /// Falls back to the innermost scope of the matching kind on unbalanced input.
   private static Scope scopeFor(Deque<Scope> stack, Sym closer) {
     char kind = closer == Sym.RBRACE ? '{' : closer == Sym.RPAREN ? '(' : '[';
     for (Scope s : stack) {
@@ -1556,7 +1440,7 @@ public final class Printer {
     }
   }
 
-  /// Marks content flowing through `scope`; `typeToken` keeps cast-type detection alive.
+  /// `typeToken` keeps this scope's cast-type detection alive.
   private void afterContentToken(Scope scope, boolean typeToken) {
     scope.hasContent = true;
     if (!typeToken) {
@@ -1586,7 +1470,6 @@ public final class Printer {
     return newScope('B', indent + INDENT, indent);
   }
 
-  /// The next pooled [Scope], re-initialized; grows the pool on first use of each slot.
   private Scope newScope(char kind, int contentIndent, int closeIndent) {
     if (scopesUsed == scopePool.size()) {
       scopePool.add(new Scope());
@@ -1724,8 +1607,6 @@ public final class Printer {
 
   // --- generic type-argument disambiguation ---
 
-  /// Index of the token closing the plausible type-argument list opened at `open`, or -1 when
-  /// the `<` cannot open one.
   private int typeArgumentsEnd(int open) {
     int prevIndex = indexOfPrevCode(open);
     if (prevIndex < 0) {
@@ -1762,8 +1643,6 @@ public final class Printer {
     return plausibleFollower ? end : -1;
   }
 
-  /// Returns the index of the token that closes the type-argument list opened at `open`,
-  /// or -1 if the token run cannot be one.
   private int scanTypeArguments(int open) {
     int depth = 1;
     for (int i = open + 1; i < tokens.size() && i - open < TYPE_ARG_SCAN_LIMIT; i++) {
@@ -1839,11 +1718,9 @@ public final class Printer {
   // Emit.
   // ---------------------------------------------------------------------------------------------
 
-  /// Joins each run of soft-broken lines back onto one line when it fits within [#MAX_WIDTH] and
-  /// the run is either a whole wrapped statement (it ends with `;`) or a statement prefix cut off
-  /// by a forced break (e.g. `var b =` rejoins its chain's first receiver while the chain stays
-  /// broken). Runs never cross a forced break, a blank line, a statement edge (`;`/`{`/`}`), a
-  /// case or label colon, an annotation line, or a trailing line comment.
+  /// Soft breaks only wrap a line to fit; once it fits again the run rejoins. A run joins only if
+  /// it is a whole wrapped statement or a prefix cut off by a forced break (so `var b =` rejoins
+  /// its chain's receiver while the chain stays broken).
   private boolean[] computeJoins() {
     boolean[] joinWithPrev = new boolean[lines.size()];
     for (int li = 0; li < lines.size();) {
@@ -1864,12 +1741,8 @@ public final class Printer {
     return joinWithPrev;
   }
 
-  /// How far the joinable run [startLine..end] actually rejoins. A run that fits joins whole. One
-  /// that overflows still keeps a method-chain receiver on the head line — breaking after `=`
-  /// cannot wrap the receiver, and canonical style keeps it there — so it joins up to the line
-  /// before the first chain `.call(`, whether that break is soft (a lone call) or forced (a
-  /// multi-call chain, already stopping the run at `end + 1`). Returns `startLine` (no join) when
-  /// the overflow is not a chain receiver or a multiline token blocks the join.
+  /// An overflowing run still keeps a method-chain receiver on the head line: breaking after `=`
+  /// cannot wrap the receiver, so it joins only up to the line before the first chain `.call(`.
   private int joinEnd(int startLine, int end, boolean endForced) {
     if (fitsJoined(startLine, end)) {
       return end;
@@ -1883,7 +1756,6 @@ public final class Printer {
     return endChainDot && !hasMultilineToken(startLine, end) ? end : startLine;
   }
 
-  /// Whether line `li` may be joined onto the line before it.
   private boolean joinable(int li) {
     Line line = lines.get(li);
     if (line.blanksBefore() > 0 || forcedBreak[line.firstToken()]) {
@@ -1935,8 +1807,7 @@ public final class Printer {
     return line.firstToken() + line.tokenCount() - 1;
   }
 
-  /// Whether the token run spanning lines `startLine`..`endLine` holds a token that renders across
-  /// multiple lines (text block, block comment), which must never be joined onto a prior line.
+  /// A multiline token (text block, block comment) must never be joined onto a prior line.
   private boolean hasMultilineToken(int startLine, int endLine) {
     int first = lines.get(startLine).firstToken();
     Line last = lines.get(endLine);
