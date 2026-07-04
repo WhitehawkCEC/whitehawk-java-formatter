@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.3.0](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.3...0.3.0) (2026-07-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **app-maven-plugin:** remove the changed parameter from format
+
+### Features
+
+* **adapter-git-cli:** restrict tracked .java files to Maven source roots ([194db12](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/194db125900c69d2b24614cb690437f3a29ef00f))
+* **app-maven-plugin:** add format-changed goal ([b185e2d](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/b185e2d50bb0ee92fb020242a7b3adb5b7560ca5))
+* **app-maven-plugin:** remove the changed parameter from format ([589a593](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/589a5931ecf5ce3cbf1530644634c654d5ef49c9))
+* **core:** add isKeyword/isPrimitive/isModifier to Token ([01cc6d2](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/01cc6d2a33ab3569fbcfcb92b2f2ec49a54a476c))
+* **core:** break a wrapped logical condition at every same operator ([98542e7](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/98542e7cdbbcff0760f70663aabed7e7972dfe35))
+* **core:** classify bracket openers/closers once per token ([86b135a](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/86b135a66ce14741d9a52fb796ad8be480d0b282))
+* **core:** migrate Printer to Token classification helpers ([ec32f77](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ec32f7735168f0e00a9f7c76781b40f2e5c4b34c))
+* **core:** move an input break after = into the right-hand side ([34b84b1](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/34b84b12d183d619ed83c1816071b8d1a11573e6))
+
 ## [0.2.3](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.2.2...0.2.3) (2026-07-03)
 
 
