@@ -12,17 +12,6 @@ import java.util.stream.Stream;
 /// [Kind#PUNCT] tokens and unterminated literals/comments run to end of input.
 @NullMarked
 public final class JavaLexer {
-  public enum Kind {
-    IDENT,
-    NUMBER,
-    STRING,
-    CHAR,
-    TEXT_BLOCK,
-    LINE_COMMENT,
-    BLOCK_COMMENT,
-    PUNCT,
-  }
-
   /// @param start          offset of the first character in the source
   /// @param end            offset just past the last character
   /// @param newlinesBefore line terminators between the previous token and this one

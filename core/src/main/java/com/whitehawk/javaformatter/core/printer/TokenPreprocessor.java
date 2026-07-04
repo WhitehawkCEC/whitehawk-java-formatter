@@ -1,6 +1,6 @@
 package com.whitehawk.javaformatter.core.printer;
 
-import com.whitehawk.javaformatter.core.JavaLexer.Kind;
+import com.whitehawk.javaformatter.core.Kind;
 import com.whitehawk.javaformatter.core.JavaLexer.Token;
 
 import org.jspecify.annotations.NullMarked;
