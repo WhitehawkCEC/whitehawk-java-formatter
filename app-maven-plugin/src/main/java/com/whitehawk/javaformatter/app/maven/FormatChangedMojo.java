@@ -9,8 +9,8 @@ import org.jspecify.annotations.NullMarked;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
-/// Formats the `.java` files git reports as changed in place: modified tracked files plus new
-/// untracked ones.
+/// Formats the source-root `.java` files git reports as changed in place: modified tracked files
+/// plus new untracked ones.
 @Mojo(name = "format-changed", defaultPhase = LifecyclePhase.NONE, threadSafe = true)
 @NullMarked
 public final class FormatChangedMojo extends AbstractFormatMojo {
