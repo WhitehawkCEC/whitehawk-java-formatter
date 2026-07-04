@@ -185,17 +185,6 @@ public final class Printer {
     }
   }
 
-  /// A per-token role resolved by the analysis pass.
-  private enum Mark {
-    GENERIC_ANGLE,
-    WILDCARD,
-    UNARY,
-    CAST_CLOSE,
-    COLON_NO_SPACE_BEFORE,
-    /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
-    ANGLE_SCANNED;
-  }
-
   private final List<Token> tokens;
   private final List<Line> lines = new ArrayList<>();
   /// Per-token [Mark]s, one bit per role.
