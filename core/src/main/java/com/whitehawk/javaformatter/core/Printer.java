@@ -1236,7 +1236,7 @@ final class Printer {
   private boolean moveAssignmentBreaks() {
     boolean changed = false;
     for (int i = 1; i < tokens.size(); i++) {
-      if (!breakBefore[i] || forcedBreak[i] || !tokens.get(i - 1).is("=")) {
+      if (!breakBefore[i] || forcedBreak[i] || tokenSym[i - 1] != Sym.ASSIGN) {
         continue;
       }
       int end = rhsEnd(i);
