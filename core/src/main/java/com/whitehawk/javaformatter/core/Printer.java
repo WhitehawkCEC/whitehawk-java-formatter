@@ -19,7 +19,9 @@ import java.util.Set;
 /// paren group's top-level comma-separated elements then starts its own line), and a method
 /// chain (two or more `.name(..)` calls) that spans more than one input line breaks before every
 /// call (and each broken call whose arguments fit collapses back onto its own line), and a string
-/// concatenation the input broke before a `+` of keeps that break. A line wider
+/// concatenation the input broke before a `+` of keeps that break, and a `&&`/`||` the input broke
+/// before keeps that break and spreads it to the element's other operators of the same text. A
+/// line wider
 /// than the line limit is wrapped the same way: its last outermost bracket
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
 /// left to break). A wrapped statement whose remaining breaks are all soft (none of the above) is
@@ -608,6 +610,7 @@ final class Printer {
 
     forceChainBreaks();
     forceConcatBreaks();
+    forceLogicalBreaks();
 
     // Canonical style never breaks before a method declaration's `throws` clause: join it to the
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
@@ -723,6 +726,48 @@ final class Printer {
       return false;
     }
     return isStringLiteral(prev) || isStringLiteral(next);
+  }
+
+  /// A `&&`/`||` the input broke before keeps its break, and the break spreads to every operator
+  /// with the same text in the same element (same bracket depth), so a condition wrapped at one
+  /// operand wraps at every operand of that precedence.
+  private void forceLogicalBreaks() {
+    for (int i = 0; i < tokens.size(); i++) {
+      Token t = tokens.get(i);
+      if (!breakBefore[i] || !t.is("&&") && !t.is("||")) {
+        continue;
+      }
+      forcedBreak[i] = true;
+      String op = t.text();
+      for (int j = i - 1; j >= 0; j--) {
+        if (isCloser(tokens.get(j)) && matchOpen[j] >= 0) {
+          j = matchOpen[j]; // a nested group is skipped whole
+        } else if (endsOperatorElement(tokens.get(j))) {
+          break;
+        } else if (tokens.get(j).is(op)) {
+          breakBefore[j] = true;
+          forcedBreak[j] = true;
+        }
+      }
+      for (int j = i + 1; j < tokens.size(); j++) {
+        Token n = tokens.get(j);
+        if ((n.is("(") || n.is("[") || n.is("{")) && matchClose[j] >= 0) {
+          j = matchClose[j];
+        } else if (endsOperatorElement(n)) {
+          break;
+        } else if (n.is(op)) {
+          breakBefore[j] = true;
+          forcedBreak[j] = true;
+        }
+      }
+    }
+  }
+
+  /// Bounds the element scan of [#forceLogicalBreaks]: any bracket still unskipped (the enclosing
+  /// group's edge or an unmatched one) or a separator ending the operand run.
+  private static boolean endsOperatorElement(Token t) {
+    return t.is("(") || t.is("[") || t.is("{") || t.is(")") || t.is("]") || t.is("}")
+      || t.is(",") || t.is(";") || t.is("?") || t.is(":") || t.is("->") || t.is("=");
   }
 
   private static boolean isStringLiteral(Token t) {
