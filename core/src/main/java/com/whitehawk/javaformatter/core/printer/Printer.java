@@ -89,10 +89,6 @@ public final class Printer {
     this.lineIndent = new int[lines.size()];
   }
 
-  private boolean hasClass(int i, Classification cls) {
-    return tokenClasses.has(i, cls);
-  }
-
   private void mark(int i, Mark mark) {
     marksChanged |= marks.set(i, mark);
   }
@@ -110,9 +106,9 @@ public final class Printer {
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
-      if (hasClass(i, Classification.OPENER)) {
+      if (tokenClasses.has(i, Classification.OPENER)) {
         openers[depth++] = i;
-      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
+      } else if (tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
         int o = openers[--depth];
         matchClose[o] = i;
         matchOpen[i] = o;
@@ -277,7 +273,7 @@ public final class Printer {
       }
       forcedBreak[i] = true;
       for (int j = i - 1; j >= 0; j--) {
-        if (hasClass(j, Classification.CLOSER) && matchOpen[j] >= 0) {
+        if (tokenClasses.has(j, Classification.CLOSER) && matchOpen[j] >= 0) {
           j = matchOpen[j]; // a nested group is skipped whole
         } else if (endsOperatorElement(j)) {
           break;
@@ -287,7 +283,7 @@ public final class Printer {
         }
       }
       for (int j = i + 1; j < tokens.size(); j++) {
-        if (hasClass(j, Classification.OPENER) && matchClose[j] >= 0) {
+        if (tokenClasses.has(j, Classification.OPENER) && matchClose[j] >= 0) {
           j = matchClose[j];
         } else if (endsOperatorElement(j)) {
           break;
@@ -301,7 +297,7 @@ public final class Printer {
   }
 
   private boolean endsOperatorElement(int i) {
-    return hasClass(i, Classification.OPENER) || hasClass(i, Classification.CLOSER) || switch (tokenSym[i]) {
+    return tokenClasses.has(i, Classification.OPENER) || tokenClasses.has(i, Classification.CLOSER) || switch (tokenSym[i]) {
       case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
       default -> false;
     };
@@ -386,9 +382,9 @@ public final class Printer {
         generic += angleDepthDelta(i);
         continue;
       }
-      if (hasClass(i, Classification.OPENER)) {
+      if (tokenClasses.has(i, Classification.OPENER)) {
         openerStack[depth++] = i;
-      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
+      } else if (tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
         depth--;
       } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
         int o = openerStack[depth - 1];
@@ -424,7 +420,7 @@ public final class Printer {
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
       for (int i = line.firstToken(); i < end; i++) {
-        if (!hasClass(i, Classification.OPENER)) {
+        if (!tokenClasses.has(i, Classification.OPENER)) {
           continue;
         }
         int c = matchClose[i];
@@ -487,7 +483,7 @@ public final class Printer {
     int generic = 0;
     for (int j = i; j < tokens.size(); j++) {
       Sym sym = tokenSym[j];
-      if (depth == 0 && generic == 0 && (hasClass(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)) {
+      if (depth == 0 && generic == 0 && (tokenClasses.has(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)) {
         return j - 1;
       }
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
@@ -495,9 +491,9 @@ public final class Printer {
       }
       if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
-      } else if (hasClass(j, Classification.OPENER)) {
+      } else if (tokenClasses.has(j, Classification.OPENER)) {
         depth++;
-      } else if (hasClass(j, Classification.CLOSER)) {
+      } else if (tokenClasses.has(j, Classification.CLOSER)) {
         depth--;
       }
     }
@@ -511,9 +507,9 @@ public final class Printer {
     for (int j = i; j <= end; j++) {
       if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
-      } else if (hasClass(j, Classification.OPENER)) {
+      } else if (tokenClasses.has(j, Classification.OPENER)) {
         depth++;
-      } else if (hasClass(j, Classification.CLOSER)) {
+      } else if (tokenClasses.has(j, Classification.CLOSER)) {
         depth--;
       } else if (
         depth == 0
@@ -530,7 +526,7 @@ public final class Printer {
   private List<Integer> topLevelChainDots(int i, int end) {
     int dot = -1;
     for (int j = i; j <= end && dot < 0; j++) {
-      if (hasClass(j, Classification.OPENER) && matchClose[j] > j) {
+      if (tokenClasses.has(j, Classification.OPENER) && matchClose[j] > j) {
         j = matchClose[j];
       } else if (isCallDot(j)) {
         dot = j;
@@ -561,7 +557,7 @@ public final class Printer {
     }
     int open = -1;
     for (int j = start; j < end; j++) {
-      if (!hasClass(j, Classification.OPENER)) {
+      if (!tokenClasses.has(j, Classification.OPENER)) {
         continue;
       }
       int c = matchClose[j];
@@ -644,9 +640,9 @@ public final class Printer {
         generic += angleDepthDelta(i);
         continue;
       }
-      if (hasClass(i, Classification.OPENER)) {
+      if (tokenClasses.has(i, Classification.OPENER)) {
         openerStack[depth++] = i;
-      } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
+      } else if (tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
         depth--;
       } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
         multiArg[openerStack[depth - 1]] = true;
@@ -687,7 +683,7 @@ public final class Printer {
       }
       int close = matchClose[open];
       int keyword = indexOfPrevCode(open);
-      if (close < 0 || keyword < 0 || !hasClass(keyword, Classification.PAREN_KEYWORD)) {
+      if (close < 0 || keyword < 0 || !tokenClasses.has(keyword, Classification.PAREN_KEYWORD)) {
         continue;
       }
       int brace = indexOfNextCode(close);
@@ -719,9 +715,9 @@ public final class Printer {
   private boolean hasTopLevelSemicolon(int open, int close) {
     int depth = 0;
     for (int i = open + 1; i < close; i++) {
-      if (hasClass(i, Classification.OPENER)) {
+      if (tokenClasses.has(i, Classification.OPENER)) {
         depth++;
-      } else if (hasClass(i, Classification.CLOSER)) {
+      } else if (tokenClasses.has(i, Classification.CLOSER)) {
         depth--;
       } else if (depth == 0 && tokenSym[i] == Sym.SEMI) {
         return true;
@@ -800,7 +796,7 @@ public final class Printer {
       int indent;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
-      } else if (hasClass(firstToken, Classification.CLOSER)) {
+      } else if (tokenClasses.has(firstToken, Classification.CLOSER)) {
         indent = scopeFor(stack, firstSym).closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, firstToken, prevIndent);
@@ -815,7 +811,7 @@ public final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = hasClass(firstToken, Classification.CLOSER) ? scopeFor(stack, firstSym).contentIndent : indent;
+      int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER) ? scopeFor(stack, firstSym).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
@@ -884,7 +880,7 @@ public final class Printer {
         continue;
       }
       Scope top = stack.peek();
-      if (!top.elementOpen && !hasClass(i, Classification.CLOSER)) {
+      if (!top.elementOpen && !tokenClasses.has(i, Classification.CLOSER)) {
         top.elementOpen = true;
         top.elementStartIndent = indent;
         top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
@@ -991,14 +987,14 @@ public final class Printer {
         } else if (sym == Sym.ASSERT) {
           top.sawAssert = true;
         }
-        if (hasClass(i, Classification.PRIMITIVE)) {
+        if (tokenClasses.has(i, Classification.PRIMITIVE)) {
           top.sawPrimitive = true;
         }
         boolean word = t.kind() != Kind.PUNCT;
         boolean typeToken = t.kind() == Kind.IDENT
           && (
-            !hasClass(i, Classification.KEYWORD)
-              || hasClass(i, Classification.PRIMITIVE)
+            !tokenClasses.has(i, Classification.KEYWORD)
+              || tokenClasses.has(i, Classification.PRIMITIVE)
               || sym == Sym.EXTENDS
               || sym == Sym.SUPER
           )
@@ -1142,7 +1138,7 @@ public final class Printer {
     if (beforeOpen >= 0) {
       Token before = tokens.get(beforeOpen);
       if (
-        before.kind() == Kind.IDENT && !hasClass(beforeOpen, Classification.KEYWORD)
+        before.kind() == Kind.IDENT && !tokenClasses.has(beforeOpen, Classification.KEYWORD)
           || tokenSym[beforeOpen] == Sym.RPAREN
           || tokenSym[beforeOpen] == Sym.RBRACKET
       ) {
@@ -1157,7 +1153,7 @@ public final class Printer {
     return switch (tokenSym[nextIndex]) {
       case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
-      default -> next.kind() != Kind.PUNCT && !hasClass(nextIndex, Classification.KEYWORD)
+      default -> next.kind() != Kind.PUNCT && !tokenClasses.has(nextIndex, Classification.KEYWORD)
         || next.kind() == Kind.NUMBER
         || next.kind() == Kind.STRING
         || next.kind() == Kind.CHAR
@@ -1181,7 +1177,7 @@ public final class Printer {
     }
     Sym prevSym = tokenSym[prevIndex];
     if (prev.kind() == Kind.IDENT) {
-      return hasClass(prevIndex, Classification.KEYWORD) && switch (prevSym) {
+      return tokenClasses.has(prevIndex, Classification.KEYWORD) && switch (prevSym) {
         case THIS, SUPER, TRUE, FALSE, NULL -> false;
         default -> true;
       };
@@ -1252,7 +1248,7 @@ public final class Printer {
         default -> {
           if (
             t.kind() != Kind.IDENT
-              || hasClass(i, Classification.KEYWORD) && !hasClass(i, Classification.PRIMITIVE)
+              || tokenClasses.has(i, Classification.KEYWORD) && !tokenClasses.has(i, Classification.PRIMITIVE)
           ) {
             return -1;
           }
@@ -1534,7 +1530,7 @@ public final class Printer {
     // Generic angle brackets bind tightly; a space follows only a list-closing `>` before a word.
     if (marks.has(nextIndex, Mark.GENERIC_ANGLE)) {
       // Type-parameter declarations keep a space after the modifier: `public <T> T get(..)`.
-      return nextSym == Sym.LT && hasClass(prevIndex, Classification.MODIFIER);
+      return nextSym == Sym.LT && tokenClasses.has(prevIndex, Classification.MODIFIER);
     }
     if (marks.has(prevIndex, Mark.GENERIC_ANGLE)) {
       return prevSym != Sym.LT
@@ -1562,10 +1558,10 @@ public final class Printer {
       return nextSym != Sym.LPAREN && nextSym != Sym.LBRACKET;
     }
     if (nextSym == Sym.LPAREN) {
-      return hasClass(prevIndex, Classification.PAREN_KEYWORD)
+      return tokenClasses.has(prevIndex, Classification.PAREN_KEYWORD)
         || prevSym == Sym.DO
         || prevSym == Sym.ELSE
-        || hasClass(prevIndex, Classification.BINARY_OPERATOR) && !marks.has(prevIndex, Mark.GENERIC_ANGLE)
+        || tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR) && !marks.has(prevIndex, Mark.GENERIC_ANGLE)
         || prevSym == Sym.SEMI
         || prevSym == Sym.COMMA;
     }
@@ -1576,8 +1572,8 @@ public final class Printer {
       return true;
     }
     if (
-      hasClass(prevIndex, Classification.BINARY_OPERATOR)
-        || hasClass(nextIndex, Classification.BINARY_OPERATOR)
+      tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR)
+        || tokenClasses.has(nextIndex, Classification.BINARY_OPERATOR)
     ) {
       return true;
     }
