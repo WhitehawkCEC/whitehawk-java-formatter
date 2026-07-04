@@ -94,18 +94,6 @@ final class Printer {
     ":",
     "->"
   );
-  /// Tokens allowed inside a type-argument list, used to disambiguate `<` from less-than.
-  private static final Set<String> TYPE_ARG_PUNCT = Set.of(
-    ".",
-    ",",
-    "?",
-    "@",
-    "&",
-    "[",
-    "]",
-    "extends",
-    "super"
-  );
   private static final int TYPE_ARG_SCAN_LIMIT = 500;
 
   private record Line(int firstToken, int tokenCount, int blanksBefore) {}
@@ -2048,23 +2036,23 @@ final class Printer {
       if (t.isComment()) {
         continue;
       }
-      if (t.is("<")) {
-        depth++;
-      } else if (t.is(">") || t.is(">>") || t.is(">>>")) {
-        depth -= t.text().length();
-        if (depth <= 0) {
-          return depth == 0 ? i : -1;
+      switch (tokenSym[i]) {
+        case LT -> depth++;
+        case GT, GT_GT, GT_GT_GT -> {
+          depth += angleDepthDelta(i);
+          if (depth <= 0) {
+            return depth == 0 ? i : -1;
+          }
         }
-      } else if (t.kind() == Kind.IDENT) {
-        if (
-          t.isKeyword()
-            && !TYPE_ARG_PUNCT.contains(t.text())
-            && !t.isPrimitive()
-        ) {
-          return -1;
+        case DOT, COMMA, QUESTION, AT, AMP, LBRACKET, RBRACKET, EXTENDS, SUPER -> {}
+        default -> {
+          if (
+            t.kind() != Kind.IDENT
+              || hasClass(i, Classification.KEYWORD) && !hasClass(i, Classification.PRIMITIVE)
+          ) {
+            return -1;
+          }
         }
-      } else if (t.kind() != Kind.PUNCT || !TYPE_ARG_PUNCT.contains(t.text())) {
-        return -1;
       }
     }
     return -1;
@@ -2073,11 +2061,10 @@ final class Printer {
   private void markTypeArguments(int open, int end) {
     marks.setGenericAngle(open);
     for (int i = open + 1; i <= end; i++) {
-      Token t = tokens.get(i);
-      if (t.is("<") || t.is(">") || t.is(">>") || t.is(">>>")) {
-        marks.setGenericAngle(i);
-      } else if (t.is("?")) {
-        marks.setWildcard(i);
+      switch (tokenSym[i]) {
+        case LT, GT, GT_GT, GT_GT_GT -> marks.setGenericAngle(i);
+        case QUESTION -> marks.setWildcard(i);
+        default -> {}
       }
     }
   }
