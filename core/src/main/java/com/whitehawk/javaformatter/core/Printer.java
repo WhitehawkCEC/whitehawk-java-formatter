@@ -2119,7 +2119,7 @@ final class Printer {
         end++;
       }
       boolean endForced = end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
-      boolean joinsStatement = lastToken(end).is(";") || endForced;
+      boolean joinsStatement = tokenSym[lastTokenIndex(end)] == Sym.SEMI || endForced;
       if (end > li && joinsStatement) {
         int joinEnd = joinEnd(li, end, endForced);
         for (int j = li + 1; j <= joinEnd; j++) {
@@ -2146,7 +2146,7 @@ final class Printer {
         return hasMultilineToken(startLine, m - 1) ? startLine : m - 1;
       }
     }
-    boolean endChainDot = endForced && tokens.get(lines.get(end + 1).firstToken()).is(".");
+    boolean endChainDot = endForced && tokenSym[lines.get(end + 1).firstToken()] == Sym.DOT;
     return endChainDot && !hasMultilineToken(startLine, end) ? end : startLine;
   }
 
@@ -2160,46 +2160,46 @@ final class Printer {
     if (isCommentOnly(line)) {
       return false;
     }
-    Token first = tokens.get(line.firstToken());
-    if (first.is("}") || first.is("@")) {
+    Sym first = tokenSym[line.firstToken()];
+    if (first == Sym.RBRACE || first == Sym.AT) {
       return false;
     }
     // A wrapped ternary keeps its `?`/`:` branch lines.
-    if (first.is("?") || first.is(":")) {
+    if (first == Sym.QUESTION || first == Sym.COLON) {
       return false;
     }
     Line prev = lines.get(li - 1);
-    if (tokens.get(prev.firstToken()).is("@")) {
+    if (tokenSym[prev.firstToken()] == Sym.AT) {
       return false;
     }
     int prevLastIndex = prev.firstToken() + prev.tokenCount() - 1;
-    Token prevLast = tokens.get(prevLastIndex);
+    Sym prevLast = tokenSym[prevLastIndex];
     if (
-      prevLast.isComment() || prevLast.is(";") || prevLast.is("{") || prevLast.is(
-        "}"
-      ) || prevLast.is(
-        ","
-      )
+      tokens.get(prevLastIndex).isComment()
+        || prevLast == Sym.SEMI
+        || prevLast == Sym.LBRACE
+        || prevLast == Sym.RBRACE
+        || prevLast == Sym.COMMA
     ) {
       return false;
     }
     // `.call()` on an invocation result (`foo(..)` or `arr[..]`) is a chain wrap point and stays
     // broken; only a `.call()` on a plain name (`FooConfig`) joins.
-    if (first.is(".") && (prevLast.is(")") || prevLast.is("]"))) {
+    if (first == Sym.DOT && (prevLast == Sym.RPAREN || prevLast == Sym.RBRACKET)) {
       return false;
     }
     // A multiline annotation stays broken from the declaration it annotates: its isolated `)`
     // closer never pulls the following modifier/type onto its line.
-    if (prevLast.is(")") && closesAnnotation(prevLastIndex)) {
+    if (prevLast == Sym.RPAREN && closesAnnotation(prevLastIndex)) {
       return false;
     }
     // A case-label or labeled-statement colon keeps its statement on the next line.
-    return !(prevLast.is(":") && marks.isColonNoSpaceBefore(prevLastIndex));
+    return !(prevLast == Sym.COLON && marks.isColonNoSpaceBefore(prevLastIndex));
   }
 
-  private Token lastToken(int li) {
+  private int lastTokenIndex(int li) {
     Line line = lines.get(li);
-    return tokens.get(line.firstToken() + line.tokenCount() - 1);
+    return line.firstToken() + line.tokenCount() - 1;
   }
 
   /// Whether the token run spanning lines `startLine`..`endLine` holds a token that renders across
@@ -2252,12 +2252,12 @@ final class Printer {
       return false;
     }
     Line prev = lines.get(li - 1);
-    Token prevLast = tokens.get(prev.firstToken() + prev.tokenCount() - 1);
-    if (prevLast.is("{") || prevLast.is("(")) {
+    Sym prevLast = tokenSym[prev.firstToken() + prev.tokenCount() - 1];
+    if (prevLast == Sym.LBRACE || prevLast == Sym.LPAREN) {
       return false;
     }
-    Token first = tokens.get(lines.get(li).firstToken());
-    return !first.is("}") && !first.is(")");
+    Sym first = tokenSym[lines.get(li).firstToken()];
+    return first != Sym.RBRACE && first != Sym.RPAREN;
   }
 
   private void appendToken(StringBuilder out, int i, int indent) {
