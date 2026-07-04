@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -160,6 +161,41 @@ final class Printer {
     }
   }
 
+  /// A class a token's text can belong to, resolved once per token (see [#of]) so hot paths avoid
+  /// repeated set lookups.
+  private enum Classification {
+    KEYWORD,
+    PRIMITIVE,
+    MODIFIER,
+    BINARY_OPERATOR,
+    PAREN_KEYWORD;
+
+    /// The classes of a token's text. Every classifying set entry is either identifier-shaped or
+    /// an operator, so only the matching token kind is probed.
+    static EnumSet<Classification> of(Token t) {
+      EnumSet<Classification> classes = EnumSet.noneOf(Classification.class);
+      if (t.kind() == Kind.PUNCT) {
+        if (BINARY_OPERATORS.contains(t.text())) {
+          classes.add(BINARY_OPERATOR);
+        }
+      } else if (t.kind() == Kind.IDENT) {
+        if (JavaLexer.KEYWORDS.contains(t.text())) {
+          classes.add(KEYWORD);
+        }
+        if (PRIMITIVES.contains(t.text())) {
+          classes.add(PRIMITIVE);
+        }
+        if (MODIFIER_KEYWORDS.contains(t.text())) {
+          classes.add(MODIFIER);
+        }
+        if (PAREN_KEYWORDS.contains(t.text())) {
+          classes.add(PAREN_KEYWORD);
+        }
+      }
+      return classes;
+    }
+  }
+
   /// Per-token roles resolved by the analysis pass, one bit per role. Tracks whether any bit was
   /// added so a caller can skip recomputing state derived from the roles.
   private static final class Marks {
@@ -263,6 +299,8 @@ final class Printer {
   private final int[] matchClose;
   /// Output width per token, or -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
+  /// Classes of each token's text, resolved once.
+  private final EnumSet<Classification>[] tokenClasses;
   /// Whether a space separates each token from its predecessor when they share a line. Depends
   /// only on tokens and marks, so it is recomputed only by an [#analyze] pass that added a mark
   /// bit; later passes reuse it for width checks and emit.
@@ -278,15 +316,24 @@ final class Printer {
     this.matchOpen = new int[n];
     this.matchClose = new int[n];
     this.tokenWidth = new int[n];
+    @SuppressWarnings("unchecked")
+    EnumSet<Classification>[] tokenClasses = (EnumSet<Classification>[]) new EnumSet<?>[n];
+    this.tokenClasses = tokenClasses;
     this.spaceBefore = new boolean[n];
     for (int i = 0; i < n; i++) {
-      String text = this.tokens.get(i).text();
+      Token t = this.tokens.get(i);
+      String text = t.text();
       tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
+      tokenClasses[i] = Classification.of(t);
     }
     computeBracketMatches();
     computeBreaks();
     buildLines();
     this.lineIndent = new int[lines.size()];
+  }
+
+  private boolean hasClass(int i, Classification cls) {
+    return tokenClasses[i].contains(cls);
   }
 
   private void computeBracketMatches() {
@@ -1694,14 +1741,14 @@ final class Printer {
         } else if (t.is("assert")) {
           top.sawAssert = true;
         }
-        if (PRIMITIVES.contains(t.text())) {
+        if (hasClass(i, Classification.PRIMITIVE)) {
           top.sawPrimitive = true;
         }
         boolean word = t.kind() != Kind.PUNCT;
         boolean typeToken = t.kind() == Kind.IDENT
           && (
-            !JavaLexer.KEYWORDS.contains(t.text())
-              || PRIMITIVES.contains(t.text())
+            !hasClass(i, Classification.KEYWORD)
+              || hasClass(i, Classification.PRIMITIVE)
               || t.is("extends")
               || t.is("super")
           )
@@ -1830,26 +1877,27 @@ final class Printer {
     if (!paren.typeLike || !paren.hasContent) {
       return false;
     }
-    Token beforeOpen = prevCode(matchOpen[closeIndex]);
+    int beforeOpen = indexOfPrevCode(matchOpen[closeIndex]);
     // A cast's `(` cannot follow a name or a closing bracket (that would be a call or index).
-    if (
-      beforeOpen != null
-        && (
-          beforeOpen.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(beforeOpen.text())
-            || beforeOpen.is(")")
-            || beforeOpen.is("]")
-        )
-    ) {
+    if (beforeOpen >= 0) {
+      Token before = tokens.get(beforeOpen);
+      if (
+        before.kind() == Kind.IDENT && !hasClass(beforeOpen, Classification.KEYWORD)
+          || before.is(")")
+          || before.is("]")
+      ) {
+        return false;
+      }
+    }
+    int nextIndex = indexOfNextCode(closeIndex);
+    if (nextIndex < 0) {
       return false;
     }
-    Token next = nextCode(closeIndex);
-    if (next == null) {
-      return false;
-    }
+    Token next = tokens.get(nextIndex);
     return switch (next.text()) {
       case "+", "-", "++", "--" -> paren.sawPrimitive;
       case "(", "!", "~", "this", "super", "new" -> true;
-      default -> next.kind() != Kind.PUNCT && !JavaLexer.KEYWORDS.contains(next.text())
+      default -> next.kind() != Kind.PUNCT && !hasClass(nextIndex, Classification.KEYWORD)
         || next.kind() == Kind.NUMBER
         || next.kind() == Kind.STRING
         || next.kind() == Kind.CHAR
@@ -1858,10 +1906,11 @@ final class Printer {
   }
 
   private boolean isUnaryPosition(int i) {
-    Token prev = prevCode(i);
-    if (prev == null) {
+    int prevIndex = indexOfPrevCode(i);
+    if (prevIndex < 0) {
       return true;
     }
+    Token prev = tokens.get(prevIndex);
     if (
       prev.kind() == Kind.NUMBER
         || prev.kind() == Kind.STRING
@@ -1871,7 +1920,7 @@ final class Printer {
       return false;
     }
     if (prev.kind() == Kind.IDENT) {
-      return JavaLexer.KEYWORDS.contains(prev.text())
+      return hasClass(prevIndex, Classification.KEYWORD)
         && !prev.is("this")
         && !prev.is("super")
         && !prev.is("true")
@@ -1879,7 +1928,7 @@ final class Printer {
         && !prev.is("null");
     }
     if (prev.is(")")) {
-      return marks.isCastClose(indexOfPrevCode(i));
+      return marks.isCastClose(prevIndex);
     }
     return !prev.is("]") && !prev.is("++") && !prev.is("--");
   }
@@ -2277,7 +2326,7 @@ final class Printer {
     // Generic angle brackets bind tightly; a space follows only a list-closing `>` before a word.
     if (marks.isGenericAngle(nextIndex)) {
       // Type-parameter declarations keep a space after the modifier: `public <T> T get(..)`.
-      return next.is("<") && MODIFIER_KEYWORDS.contains(prev.text());
+      return next.is("<") && hasClass(prevIndex, Classification.MODIFIER);
     }
     if (marks.isGenericAngle(prevIndex)) {
       return !prev.is("<") && (next.kind() != Kind.PUNCT || next.is("{") || next.is("@"));
@@ -2304,10 +2353,10 @@ final class Printer {
       return !next.is("(") && !next.is("[");
     }
     if (next.is("(")) {
-      return prev.kind() == Kind.IDENT && PAREN_KEYWORDS.contains(prev.text())
+      return hasClass(prevIndex, Classification.PAREN_KEYWORD)
         || prev.is("do")
         || prev.is("else")
-        || BINARY_OPERATORS.contains(prev.text()) && !marks.isGenericAngle(prevIndex)
+        || hasClass(prevIndex, Classification.BINARY_OPERATOR) && !marks.isGenericAngle(prevIndex)
         || prev.is(";")
         || prev.is(",");
     }
@@ -2317,7 +2366,10 @@ final class Printer {
     if (prev.is(";") || prev.is(",")) {
       return true;
     }
-    if (BINARY_OPERATORS.contains(prev.text()) || BINARY_OPERATORS.contains(next.text())) {
+    if (
+      hasClass(prevIndex, Classification.BINARY_OPERATOR)
+        || hasClass(nextIndex, Classification.BINARY_OPERATOR)
+    ) {
       return true;
     }
     boolean prevWord = prev.kind() != Kind.PUNCT;
