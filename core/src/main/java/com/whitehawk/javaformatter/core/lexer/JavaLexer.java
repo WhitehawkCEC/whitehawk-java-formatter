@@ -1,10 +1,11 @@
-package com.whitehawk.javaformatter.core;
+package com.whitehawk.javaformatter.core.lexer;
 
+import com.whitehawk.javaformatter.core.Kind;
+import com.whitehawk.javaformatter.core.Token;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /// Lexes Java source into a flat token stream, preserving comments and the number of line
