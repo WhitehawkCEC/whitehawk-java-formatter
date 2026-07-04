@@ -82,7 +82,8 @@ var x = foo.newBuilder().a(1).b(2).build(); // ...pushed past 100 cols
 ```
 
 ```java
-var x = foo.newBuilder()
+var x = foo
+  .newBuilder()
   .a(1)
   .b(2)
   .build();
