@@ -945,9 +945,12 @@ final class Printer {
   /// with the same text in the same element (same bracket depth), so a condition wrapped at one
   /// operand wraps at every operand of that precedence.
   private void forceLogicalBreaks() {
+    // An operator reached by an earlier operator's spread needs no scan of its own: the spread
+    // already covered every same-text operator of the element.
+    boolean[] spread = new boolean[tokens.size()];
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
-      if (!breakBefore[i] || !t.is("&&") && !t.is("||")) {
+      if (!breakBefore[i] || spread[i] || !t.is("&&") && !t.is("||")) {
         continue;
       }
       forcedBreak[i] = true;
@@ -970,6 +973,7 @@ final class Printer {
         } else if (tokens.get(j).is(op)) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
+          spread[j] = true;
         }
       }
     }
