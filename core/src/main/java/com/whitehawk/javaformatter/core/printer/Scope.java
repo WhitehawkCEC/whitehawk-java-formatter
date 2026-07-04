@@ -24,6 +24,9 @@ final class Scope {
   boolean elementOpen;
   boolean forParen;
   boolean sawSwitch;
+  /// Column of the `switch` keyword, so its body indents from the keyword when the header wraps
+  /// onto a continuation line rather than from that line's indent.
+  int sawSwitchColumn;
   boolean sawEnum;
   boolean sawAssert;
   boolean caseLabel;
@@ -46,6 +49,7 @@ final class Scope {
     elementOpen = false;
     forParen = false;
     sawSwitch = false;
+    sawSwitchColumn = 0;
     sawEnum = false;
     sawAssert = false;
     caseLabel = false;

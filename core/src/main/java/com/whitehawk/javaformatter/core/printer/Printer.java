@@ -843,12 +843,14 @@ public final class Printer {
       int firstToken = line.firstToken();
       Sym firstSym = tokenSym[firstToken];
       int indent;
+      boolean continuation = false;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
       } else if (tokenClasses.has(firstToken, Classification.CLOSER)) {
         indent = scopeFor(stack, firstSym).closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, firstToken, prevIndent);
+        continuation = true;
       } else {
         indent = top.contentIndent;
         if (top.kind == Scope.Kind.SWITCH_BODY && firstSym != Sym.CASE && firstSym != Sym.DEFAULT) {
@@ -865,7 +867,7 @@ public final class Printer {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
       pendingComments.clear();
-      walkLine(stack, line, indent);
+      walkLine(stack, line, indent, continuation);
     }
     for (int ci : pendingComments) {
       lineIndent[ci] = tokens.get(
@@ -922,7 +924,7 @@ public final class Printer {
     return stack.peekLast();
   }
 
-  private void walkLine(Deque<Scope> stack, Line line, int indent) {
+  private void walkLine(Deque<Scope> stack, Line line, int indent, boolean continuation) {
     for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
       Token t = tokens.get(i);
       if (t.isComment()) {
@@ -935,12 +937,17 @@ public final class Printer {
         top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
           && (tokenSym[i] == Sym.CASE || tokenSym[i] == Sym.DEFAULT);
       }
-      analyzeToken(stack, i, indent);
+      // A `switch` on a wrapped continuation line sits past its line's indent; measure its column
+      // so its body indents from the keyword rather than from the continuation indent.
+      int column = continuation
+        ? indent + runWidth(line.firstToken(), i) + (spaceBefore[i] ? 1 : 0)
+        : indent;
+      analyzeToken(stack, i, indent, column);
     }
     endOfLine(stack, line);
   }
 
-  private void analyzeToken(Deque<Scope> stack, int i, int indent) {
+  private void analyzeToken(Deque<Scope> stack, int i, int indent, int column) {
     Token t = tokens.get(i);
     Scope top = stack.peek();
     Sym sym = tokenSym[i];
@@ -1031,6 +1038,7 @@ public final class Printer {
       default -> {
         if (sym == Sym.SWITCH) {
           top.sawSwitch = true;
+          top.sawSwitchColumn = column;
         } else if (sym == Sym.ENUM) {
           top.sawEnum = true;
         } else if (sym == Sym.ASSERT) {
@@ -1090,8 +1098,9 @@ public final class Printer {
       return newScope(Scope.Kind.ARRAY_INIT, indent + INDENT, indent);
     }
     if (top.sawSwitch && prevSym == Sym.RPAREN) {
+      int base = top.sawSwitchColumn;
       top.sawSwitch = false;
-      return newScope(Scope.Kind.SWITCH_BODY, indent + INDENT, indent);
+      return newScope(Scope.Kind.SWITCH_BODY, base + INDENT, base);
     }
     if (top.sawEnum) {
       top.sawEnum = false;
