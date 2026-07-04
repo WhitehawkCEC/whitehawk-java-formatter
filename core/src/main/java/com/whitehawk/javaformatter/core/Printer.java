@@ -1604,17 +1604,18 @@ final class Printer {
         continue;
       }
       Scope top = stack.peek();
-      Token first = tokens.get(line.firstToken());
+      int firstToken = line.firstToken();
+      Sym firstSym = tokenSym[firstToken];
       int indent;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
-      } else if (isCloser(line.firstToken())) {
-        indent = scopeFor(stack, first).closeIndent;
+      } else if (isCloser(firstToken)) {
+        indent = scopeFor(stack, firstSym).closeIndent;
       } else if (top.elementOpen) {
-        indent = continuationIndent(top, line.firstToken(), prevIndent);
+        indent = continuationIndent(top, firstToken, prevIndent);
       } else {
         indent = top.contentIndent;
-        if (top.kind == 'S' && !first.is("case") && !first.is("default")) {
+        if (top.kind == 'S' && firstSym != Sym.CASE && firstSym != Sym.DEFAULT) {
           indent += INDENT;
         }
       }
@@ -1623,7 +1624,7 @@ final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = isCloser(line.firstToken()) ? scopeFor(stack, first).contentIndent : indent;
+      int bodyIndent = isCloser(firstToken) ? scopeFor(stack, firstSym).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
@@ -1649,11 +1650,11 @@ final class Printer {
   /// A ternary's branch lines sit one level past the line holding the end of its condition — one
   /// level past the previous line for `?`, aligned with the matching `?` for `:`.
   private int continuationIndent(Scope top, int firstToken, int prevIndent) {
-    Token first = tokens.get(firstToken);
-    if (first.is("?") && !marks.isWildcard(firstToken)) {
+    Sym sym = tokenSym[firstToken];
+    if (sym == Sym.QUESTION && !marks.isWildcard(firstToken)) {
       return prevIndent + INDENT;
     }
-    if (first.is(":") && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
+    if (sym == Sym.COLON && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
       return top.ternaryIndents.peek();
     }
     return top.elementStartIndent + INDENT;
@@ -1670,8 +1671,8 @@ final class Printer {
 
   /// The scope a closing token returns to: normally the top of the stack; on unbalanced input,
   /// the innermost scope of the matching kind.
-  private static Scope scopeFor(Deque<Scope> stack, Token closer) {
-    char kind = closer.is("}") ? '{' : closer.is(")") ? '(' : '[';
+  private static Scope scopeFor(Deque<Scope> stack, Sym closer) {
+    char kind = closer == Sym.RBRACE ? '{' : closer == Sym.RPAREN ? '(' : '[';
     for (Scope s : stack) {
       boolean matches = switch (kind) {
         case '{' -> s.kind == 'B' || s.kind == 'S' || s.kind == 'E' || s.kind == 'A';
@@ -1695,7 +1696,8 @@ final class Printer {
       if (!top.elementOpen && !isCloser(i)) {
         top.elementOpen = true;
         top.elementStartIndent = indent;
-        top.caseLabel = top.kind == 'S' && (t.is("case") || t.is("default"));
+        top.caseLabel = top.kind == 'S'
+          && (tokenSym[i] == Sym.CASE || tokenSym[i] == Sym.DEFAULT);
       }
       analyzeToken(stack, i, indent);
     }
@@ -1705,9 +1707,9 @@ final class Printer {
   private void analyzeToken(Deque<Scope> stack, int i, int indent) {
     Token t = tokens.get(i);
     Scope top = stack.peek();
-    updateAnnotationState(top, t);
-
     Sym sym = tokenSym[i];
+    updateAnnotationState(top, t, sym);
+
     switch (sym) {
       case LPAREN -> {
         Scope scope = new Scope('P', indent + INDENT, indent);
@@ -1819,11 +1821,12 @@ final class Printer {
     }
   }
 
-  private void updateAnnotationState(Scope top, Token t) {
+  private void updateAnnotationState(Scope top, Token t, Sym sym) {
     switch (top.annotationState) {
-      case 0 -> top.annotationState = t.is("@") ? 1 : -1;
+      case 0 -> top.annotationState = sym == Sym.AT ? 1 : -1;
       case 1 -> top.annotationState = t.kind() == Kind.IDENT ? 2 : -1;
-      case 2 -> top.annotationState = t.is("@") ? 1 : t.is(".") ? 1 : t.is("(") ? 2 : -1;
+      case 2 -> top.annotationState = sym == Sym.AT || sym == Sym.DOT ? 1
+        : sym == Sym.LPAREN ? 2 : -1;
       default -> {}
     }
   }
@@ -1838,13 +1841,16 @@ final class Printer {
 
   private Scope openBrace(Deque<Scope> stack, int i, int indent) {
     Scope top = stack.peek();
-    Token prev = prevCode(i);
-    if (
-      prev != null && (prev.is("=") || prev.is(",") || prev.is("{") || prev.is("(") || prev.is("]"))
-    ) {
+    int prev = indexOfPrevCode(i);
+    Sym prevSym = prev < 0 ? Sym.OTHER : tokenSym[prev];
+    boolean arrayInit = switch (prevSym) {
+      case ASSIGN, COMMA, LBRACE, LPAREN, RBRACKET -> true;
+      default -> false;
+    };
+    if (arrayInit) {
       return new Scope('A', indent + INDENT, indent);
     }
-    if (top.sawSwitch && prev != null && prev.is(")")) {
+    if (top.sawSwitch && prevSym == Sym.RPAREN) {
       top.sawSwitch = false;
       return new Scope('S', indent + INDENT, indent);
     }
@@ -1903,18 +1909,18 @@ final class Printer {
   }
 
   private void endOfLine(Deque<Scope> stack, Line line) {
-    Token last = null;
+    int last = -1;
     for (int i = line.firstToken() + line.tokenCount() - 1; i >= line.firstToken(); i--) {
       if (!tokens.get(i).isComment()) {
-        last = tokens.get(i);
+        last = i;
         break;
       }
     }
-    if (last == null) {
+    if (last < 0) {
       return;
     }
     Scope top = stack.peek();
-    if (last.is("}")) {
+    if (tokenSym[last] == Sym.RBRACE) {
       closeElement(top);
     } else if (top.elementOpen && top.annotationState == 2) {
       closeElement(top); // annotation-only line: next line starts fresh at the same indent
@@ -1931,8 +1937,8 @@ final class Printer {
       Token before = tokens.get(beforeOpen);
       if (
         before.kind() == Kind.IDENT && !hasClass(beforeOpen, Classification.KEYWORD)
-          || before.is(")")
-          || before.is("]")
+          || tokenSym[beforeOpen] == Sym.RPAREN
+          || tokenSym[beforeOpen] == Sym.RBRACKET
       ) {
         return false;
       }
@@ -1942,9 +1948,9 @@ final class Printer {
       return false;
     }
     Token next = tokens.get(nextIndex);
-    return switch (next.text()) {
-      case "+", "-", "++", "--" -> paren.sawPrimitive;
-      case "(", "!", "~", "this", "super", "new" -> true;
+    return switch (tokenSym[nextIndex]) {
+      case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
+      case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
       default -> next.kind() != Kind.PUNCT && !hasClass(nextIndex, Classification.KEYWORD)
         || next.kind() == Kind.NUMBER
         || next.kind() == Kind.STRING
@@ -1967,18 +1973,20 @@ final class Printer {
     ) {
       return false;
     }
+    Sym prevSym = tokenSym[prevIndex];
     if (prev.kind() == Kind.IDENT) {
-      return hasClass(prevIndex, Classification.KEYWORD)
-        && !prev.is("this")
-        && !prev.is("super")
-        && !prev.is("true")
-        && !prev.is("false")
-        && !prev.is("null");
+      return hasClass(prevIndex, Classification.KEYWORD) && switch (prevSym) {
+        case THIS, SUPER, TRUE, FALSE, NULL -> false;
+        default -> true;
+      };
     }
-    if (prev.is(")")) {
+    if (prevSym == Sym.RPAREN) {
       return marks.isCastClose(prevIndex);
     }
-    return !prev.is("]") && !prev.is("++") && !prev.is("--");
+    return switch (prevSym) {
+      case RBRACKET, INCREMENT, DECREMENT -> false;
+      default -> true;
+    };
   }
 
   // --- generic type-argument disambiguation ---
