@@ -462,44 +462,28 @@ final class Printer {
   }
 
   /// Rebuilds the token list with a synthetic `{`/`}` around each wrap's controlled statement.
-  /// Braces opening at the same token nest outermost-first; those closing at the same token nest
-  /// innermost-first.
+  /// The inserted braces are indistinguishable, so only their count per token matters.
   private static List<Token> applyWraps(List<Token> in, List<int[]> wraps) {
     int n = in.size();
-    List<List<Integer>> openEnds = new ArrayList<>(n);
-    List<List<Integer>> closeStarts = new ArrayList<>(n);
-    for (int i = 0; i < n; i++) {
-      openEnds.add(null);
-      closeStarts.add(null);
-    }
+    int[] opensAt = new int[n];
+    int[] closesAt = new int[n];
     for (int[] w : wraps) {
-      if (openEnds.get(w[0]) == null) {
-        openEnds.set(w[0], new ArrayList<>());
-      }
-      openEnds.get(w[0]).add(w[1]);
-      if (closeStarts.get(w[1]) == null) {
-        closeStarts.set(w[1], new ArrayList<>());
-      }
-      closeStarts.get(w[1]).add(w[0]);
+      opensAt[w[0]]++;
+      closesAt[w[1]]++;
     }
     List<Token> out = new ArrayList<>(n + 2 * wraps.size());
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
-      List<Integer> opens = openEnds.get(i);
-      if (opens != null) {
-        for (int k = 0; k < opens.size(); k++) {
+      if (opensAt[i] > 0) {
+        for (int k = 0; k < opensAt[i]; k++) {
           out.add(new Token(Kind.PUNCT, "{", t.start(), t.start(), 0, false));
         }
         // The controlled statement starts its own line so the block spans multiple lines.
         t = new Token(t.kind(), t.text(), t.start(), t.end(), Math.max(1, t.newlinesBefore()), t.atColumn0());
       }
       out.add(t);
-      List<Integer> closes = closeStarts.get(i);
-      if (closes != null) {
-        closes.sort(java.util.Comparator.reverseOrder());
-        for (int k = 0; k < closes.size(); k++) {
-          out.add(new Token(Kind.PUNCT, "}", t.end(), t.end(), 1, false));
-        }
+      for (int k = 0; k < closesAt[i]; k++) {
+        out.add(new Token(Kind.PUNCT, "}", t.end(), t.end(), 1, false));
       }
     }
     return out;
