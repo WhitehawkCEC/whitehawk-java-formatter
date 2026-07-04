@@ -145,7 +145,9 @@ final class Printer {
     PRIMITIVE,
     MODIFIER,
     BINARY_OPERATOR,
-    PAREN_KEYWORD;
+    PAREN_KEYWORD,
+    OPENER,
+    CLOSER;
 
     /// The classes of a token's text. Every classifying set entry is either identifier-shaped or
     /// an operator, so only the matching token kind is probed.
@@ -154,6 +156,11 @@ final class Printer {
       if (t.kind() == Kind.PUNCT) {
         if (BINARY_OPERATORS.contains(t.text())) {
           classes.add(BINARY_OPERATOR);
+        }
+        switch (t.text()) {
+          case "(", "[", "{" -> classes.add(OPENER);
+          case ")", "]", "}" -> classes.add(CLOSER);
+          default -> {}
         }
       } else if (t.kind() == Kind.IDENT) {
         if (t.isKeyword()) {
@@ -313,16 +320,25 @@ final class Printer {
     return tokenClasses[i].contains(cls);
   }
 
+  /// The token at `i` is `(`, `[`, or `{`.
+  private boolean isOpener(int i) {
+    return hasClass(i, Classification.OPENER);
+  }
+
+  /// The token at `i` is `)`, `]`, or `}`.
+  private boolean isCloser(int i) {
+    return hasClass(i, Classification.CLOSER);
+  }
+
   private void computeBracketMatches() {
     Arrays.fill(matchOpen, -1);
     Arrays.fill(matchClose, -1);
     int[] openers = new int[tokens.size()];
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
-      Token t = tokens.get(i);
-      if (t.is("(") || t.is("[") || t.is("{")) {
+      if (isOpener(i)) {
         openers[depth++] = i;
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
+      } else if (isCloser(i) && depth > 0) {
         int o = openers[--depth];
         matchClose[o] = i;
         matchOpen[i] = o;
@@ -932,9 +948,9 @@ final class Printer {
       forcedBreak[i] = true;
       String op = t.text();
       for (int j = i - 1; j >= 0; j--) {
-        if (isCloser(tokens.get(j)) && matchOpen[j] >= 0) {
+        if (isCloser(j) && matchOpen[j] >= 0) {
           j = matchOpen[j]; // a nested group is skipped whole
-        } else if (endsOperatorElement(tokens.get(j))) {
+        } else if (endsOperatorElement(j)) {
           break;
         } else if (tokens.get(j).is(op)) {
           breakBefore[j] = true;
@@ -942,12 +958,11 @@ final class Printer {
         }
       }
       for (int j = i + 1; j < tokens.size(); j++) {
-        Token n = tokens.get(j);
-        if ((n.is("(") || n.is("[") || n.is("{")) && matchClose[j] >= 0) {
+        if (isOpener(j) && matchClose[j] >= 0) {
           j = matchClose[j];
-        } else if (endsOperatorElement(n)) {
+        } else if (endsOperatorElement(j)) {
           break;
-        } else if (n.is(op)) {
+        } else if (tokens.get(j).is(op)) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
         }
@@ -957,13 +972,10 @@ final class Printer {
 
   /// Bounds the element scan of [#forceLogicalBreaks]: any bracket still unskipped (the enclosing
   /// group's edge or an unmatched one) or a separator ending the operand run.
-  private static boolean endsOperatorElement(Token t) {
-    return t.is("(")
-      || t.is("[")
-      || t.is("{")
-      || t.is(")")
-      || t.is("]")
-      || t.is("}")
+  private boolean endsOperatorElement(int i) {
+    Token t = tokens.get(i);
+    return isOpener(i)
+      || isCloser(i)
       || t.is(",")
       || t.is(";")
       || t.is("?")
@@ -1053,9 +1065,9 @@ final class Printer {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
         continue;
       }
-      if (t.is("(") || t.is("[") || t.is("{")) {
+      if (isOpener(i)) {
         openers[depth++] = i;
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
+      } else if (isCloser(i) && depth > 0) {
         depth--;
       } else if (t.is(",") && generic == 0 && depth > 0) {
         int o = openers[depth - 1];
@@ -1093,8 +1105,7 @@ final class Printer {
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
       for (int i = line.firstToken(); i < end; i++) {
-        Token t = tokens.get(i);
-        if (!t.is("(") && !t.is("[") && !t.is("{")) {
+        if (!isOpener(i)) {
           continue;
         }
         int c = matchClose[i];
@@ -1162,7 +1173,7 @@ final class Printer {
     int generic = 0;
     for (int j = i; j < tokens.size(); j++) {
       Token t = tokens.get(j);
-      if (depth == 0 && generic == 0 && (isCloser(t) || t.is(";") || t.is(","))) {
+      if (depth == 0 && generic == 0 && (isCloser(j) || t.is(";") || t.is(","))) {
         return j - 1;
       }
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
@@ -1170,9 +1181,9 @@ final class Printer {
       }
       if (marks.isGenericAngle(j)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
-      } else if (t.is("(") || t.is("[") || t.is("{")) {
+      } else if (isOpener(j)) {
         depth++;
-      } else if (isCloser(t)) {
+      } else if (isCloser(j)) {
         depth--;
       }
     }
@@ -1189,9 +1200,9 @@ final class Printer {
       Token t = tokens.get(j);
       if (marks.isGenericAngle(j)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
-      } else if (t.is("(") || t.is("[") || t.is("{")) {
+      } else if (isOpener(j)) {
         depth++;
-      } else if (isCloser(t)) {
+      } else if (isCloser(j)) {
         depth--;
       } else if (
         depth == 0
@@ -1210,8 +1221,7 @@ final class Printer {
   private List<Integer> topLevelChainDots(int i, int end) {
     int dot = -1;
     for (int j = i; j <= end && dot < 0; j++) {
-      Token t = tokens.get(j);
-      if ((t.is("(") || t.is("[") || t.is("{")) && matchClose[j] > j) {
+      if (isOpener(j) && matchClose[j] > j) {
         j = matchClose[j];
       } else if (isCallDot(j)) {
         dot = j;
@@ -1246,8 +1256,7 @@ final class Printer {
     int end = line.firstToken() + line.tokenCount();
     int open = -1;
     for (int j = start; j < end; j++) {
-      Token t = tokens.get(j);
-      if (!t.is("(") && !t.is("[") && !t.is("{")) {
+      if (!isOpener(j)) {
         continue;
       }
       int c = matchClose[j];
@@ -1340,9 +1349,9 @@ final class Printer {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
         continue;
       }
-      if (t.is("(") || t.is("[") || t.is("{")) {
+      if (isOpener(i)) {
         depth++;
-      } else if (t.is(")") || t.is("]") || t.is("}")) {
+      } else if (isCloser(i)) {
         depth--;
       } else if (t.is(",") && depth == 0 && generic == 0) {
         return true;
@@ -1356,12 +1365,11 @@ final class Printer {
   /// chain the surrounding group already lays out multiline, so its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = dot - 1; o >= 0; o--) {
-      Token t = tokens.get(o);
-      if (t.is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
+      if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
         return true;
       }
       // A group closed before `dot` cannot enclose the call: skip its contents whole.
-      if ((t.is(")") || t.is("]") || t.is("}")) && matchOpen[o] >= 0) {
+      if (isCloser(o) && matchOpen[o] >= 0) {
         o = matchOpen[o];
       }
     }
@@ -1442,12 +1450,11 @@ final class Printer {
   private boolean hasTopLevelSemicolon(int open, int close) {
     int depth = 0;
     for (int i = open + 1; i < close; i++) {
-      Token t = tokens.get(i);
-      if (t.is("(") || t.is("[") || t.is("{")) {
+      if (isOpener(i)) {
         depth++;
-      } else if (t.is(")") || t.is("]") || t.is("}")) {
+      } else if (isCloser(i)) {
         depth--;
-      } else if (depth == 0 && t.is(";")) {
+      } else if (depth == 0 && tokens.get(i).is(";")) {
         return true;
       }
     }
@@ -1514,7 +1521,7 @@ final class Printer {
       int indent;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
-      } else if (isCloser(first)) {
+      } else if (isCloser(line.firstToken())) {
         indent = scopeFor(stack, first).closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, line.firstToken(), prevIndent);
@@ -1529,7 +1536,7 @@ final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = isCloser(first) ? scopeFor(stack, first).contentIndent : indent;
+      int bodyIndent = isCloser(line.firstToken()) ? scopeFor(stack, first).contentIndent : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
@@ -1571,10 +1578,6 @@ final class Printer {
     return true;
   }
 
-  private static boolean isCloser(Token t) {
-    return t.is("}") || t.is(")") || t.is("]");
-  }
-
   /// The scope a closing token returns to: normally the top of the stack; on unbalanced input,
   /// the innermost scope of the matching kind.
   private static Scope scopeFor(Deque<Scope> stack, Token closer) {
@@ -1599,7 +1602,7 @@ final class Printer {
         continue;
       }
       Scope top = stack.peek();
-      if (!top.elementOpen && !isCloser(t)) {
+      if (!top.elementOpen && !isCloser(i)) {
         top.elementOpen = true;
         top.elementStartIndent = indent;
         top.caseLabel = top.kind == 'S' && (t.is("case") || t.is("default"));
