@@ -20,7 +20,46 @@ final class TokenPreprocessor {
   private TokenPreprocessor() {}
 
   static List<Token> preprocess(List<Token> tokens) {
-    return insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
+    return insertMissingBraces(
+      expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
+    );
+  }
+
+  /// Canonical style terminates an enum's constant list with `;`. A list ending in a trailing comma
+  /// has no member section, so the comma is the last thing before the closing brace; append the
+  /// missing `;`. A list already ending in `;` (or a bare constant) is left untouched.
+  private static List<Token> terminateEnumConstants(List<Token> in) {
+    int n = in.size();
+    int[] close = matchAllBrackets(in);
+    Set<Integer> insertAfter = new HashSet<>(); // append `;` after this comma
+    for (int i = 0; i < n; i++) {
+      if (!in.get(i).is("enum")) {
+        continue;
+      }
+      int bodyOpen = i + 1;
+      while (bodyOpen < n && !in.get(bodyOpen).is("{")) {
+        bodyOpen++;
+      }
+      if (bodyOpen >= n || close[bodyOpen] < 0) {
+        continue;
+      }
+      int last = prevCodeIndex(in, close[bodyOpen]);
+      if (last > bodyOpen && in.get(last).is(",")) {
+        insertAfter.add(last);
+      }
+    }
+    if (insertAfter.isEmpty()) {
+      return in;
+    }
+    List<Token> out = new ArrayList<>(n + insertAfter.size());
+    for (int i = 0; i < n; i++) {
+      Token t = in.get(i);
+      out.add(t);
+      if (insertAfter.contains(i)) {
+        out.add(new Token(Kind.PUNCT, ";", t.end(), t.end(), 1, false));
+      }
+    }
+    return out;
   }
 
   /// A name mentioned only in a comment (e.g. a javadoc `{@link Foo}`) still counts as used.
