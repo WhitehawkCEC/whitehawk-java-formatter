@@ -103,10 +103,6 @@ public final class Printer {
     return was;
   }
 
-  private boolean isOpener(int i) {
-    return hasClass(i, Classification.OPENER);
-  }
-
   private void computeBracketMatches() {
     Arrays.fill(matchOpen, -1);
     Arrays.fill(matchClose, -1);
@@ -114,7 +110,7 @@ public final class Printer {
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
-      if (isOpener(i)) {
+      if (hasClass(i, Classification.OPENER)) {
         openers[depth++] = i;
       } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         int o = openers[--depth];
@@ -291,7 +287,7 @@ public final class Printer {
         }
       }
       for (int j = i + 1; j < tokens.size(); j++) {
-        if (isOpener(j) && matchClose[j] >= 0) {
+        if (hasClass(j, Classification.OPENER) && matchClose[j] >= 0) {
           j = matchClose[j];
         } else if (endsOperatorElement(j)) {
           break;
@@ -305,7 +301,7 @@ public final class Printer {
   }
 
   private boolean endsOperatorElement(int i) {
-    return isOpener(i) || hasClass(i, Classification.CLOSER) || switch (tokenSym[i]) {
+    return hasClass(i, Classification.OPENER) || hasClass(i, Classification.CLOSER) || switch (tokenSym[i]) {
       case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
       default -> false;
     };
@@ -390,7 +386,7 @@ public final class Printer {
         generic += angleDepthDelta(i);
         continue;
       }
-      if (isOpener(i)) {
+      if (hasClass(i, Classification.OPENER)) {
         openerStack[depth++] = i;
       } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         depth--;
@@ -428,7 +424,7 @@ public final class Printer {
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
       for (int i = line.firstToken(); i < end; i++) {
-        if (!isOpener(i)) {
+        if (!hasClass(i, Classification.OPENER)) {
           continue;
         }
         int c = matchClose[i];
@@ -499,7 +495,7 @@ public final class Printer {
       }
       if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
-      } else if (isOpener(j)) {
+      } else if (hasClass(j, Classification.OPENER)) {
         depth++;
       } else if (hasClass(j, Classification.CLOSER)) {
         depth--;
@@ -515,7 +511,7 @@ public final class Printer {
     for (int j = i; j <= end; j++) {
       if (marks.has(j, Mark.GENERIC_ANGLE)) {
         generic += angleDepthDelta(j);
-      } else if (isOpener(j)) {
+      } else if (hasClass(j, Classification.OPENER)) {
         depth++;
       } else if (hasClass(j, Classification.CLOSER)) {
         depth--;
@@ -534,7 +530,7 @@ public final class Printer {
   private List<Integer> topLevelChainDots(int i, int end) {
     int dot = -1;
     for (int j = i; j <= end && dot < 0; j++) {
-      if (isOpener(j) && matchClose[j] > j) {
+      if (hasClass(j, Classification.OPENER) && matchClose[j] > j) {
         j = matchClose[j];
       } else if (isCallDot(j)) {
         dot = j;
@@ -565,7 +561,7 @@ public final class Printer {
     }
     int open = -1;
     for (int j = start; j < end; j++) {
-      if (!isOpener(j)) {
+      if (!hasClass(j, Classification.OPENER)) {
         continue;
       }
       int c = matchClose[j];
@@ -648,7 +644,7 @@ public final class Printer {
         generic += angleDepthDelta(i);
         continue;
       }
-      if (isOpener(i)) {
+      if (hasClass(i, Classification.OPENER)) {
         openerStack[depth++] = i;
       } else if (hasClass(i, Classification.CLOSER) && depth > 0) {
         depth--;
@@ -723,7 +719,7 @@ public final class Printer {
   private boolean hasTopLevelSemicolon(int open, int close) {
     int depth = 0;
     for (int i = open + 1; i < close; i++) {
-      if (isOpener(i)) {
+      if (hasClass(i, Classification.OPENER)) {
         depth++;
       } else if (hasClass(i, Classification.CLOSER)) {
         depth--;
