@@ -11,8 +11,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /// Renders a token stream back to source. Line breaks are normalized: a bracket group that spans
@@ -180,6 +182,90 @@ final class Printer {
     }
   }
 
+  /// Texts the printer dispatches on, resolved once per token (see [#tokenSym]) so hot paths
+  /// compare or switch on a symbol instead of running chains of string comparisons. [#OTHER]
+  /// covers every text no dispatch names.
+  private enum Sym {
+    OTHER(""),
+    LPAREN("("),
+    RPAREN(")"),
+    LBRACKET("["),
+    RBRACKET("]"),
+    LBRACE("{"),
+    RBRACE("}"),
+    SEMI(";"),
+    COMMA(","),
+    DOT("."),
+    METHOD_REF("::"),
+    COLON(":"),
+    QUESTION("?"),
+    ARROW("->"),
+    AT("@"),
+    ELLIPSIS("..."),
+    LT("<"),
+    GT(">"),
+    GT_GT(">>"),
+    GT_GT_GT(">>>"),
+    ASSIGN("="),
+    AMP("&"),
+    BAR("|"),
+    BANG("!"),
+    TILDE("~"),
+    PLUS("+"),
+    MINUS("-"),
+    INCREMENT("++"),
+    DECREMENT("--"),
+    RETURN("return"),
+    NEW("new"),
+    EXTENDS("extends"),
+    SUPER("super"),
+    IMPLEMENTS("implements"),
+    INSTANCEOF("instanceof"),
+    CASE("case"),
+    YIELD("yield"),
+    PUBLIC("public"),
+    PRIVATE("private"),
+    PROTECTED("protected"),
+    STATIC("static"),
+    FINAL("final"),
+    DEFAULT("default"),
+    ABSTRACT("abstract"),
+    CLASS("class"),
+    INTERFACE("interface"),
+    RECORD("record"),
+    DO("do"),
+    ELSE("else"),
+    SWITCH("switch"),
+    ENUM("enum"),
+    ASSERT("assert"),
+    THIS("this"),
+    TRUE("true"),
+    FALSE("false"),
+    NULL("null"),
+    FOR("for"),
+    TRY("try");
+
+    private static final Map<String, Sym> BY_TEXT = new HashMap<>();
+
+    static {
+      for (Sym s : values()) {
+        if (s != OTHER) {
+          BY_TEXT.put(s.text, s);
+        }
+      }
+    }
+
+    private final String text;
+
+    Sym(String text) {
+      this.text = text;
+    }
+
+    static Sym of(String text) {
+      return BY_TEXT.getOrDefault(text, OTHER);
+    }
+  }
+
   /// Per-token roles resolved by the analysis pass, one bit per role. Tracks whether any bit was
   /// added so a caller can skip recomputing state derived from the roles.
   private static final class Marks {
@@ -288,6 +374,8 @@ final class Printer {
   private final int[] tokenWidth;
   /// Classes of each token's text, resolved once.
   private final EnumSet<Classification>[] tokenClasses;
+  /// Dispatch symbol of each token's text, resolved once.
+  private final Sym[] tokenSym;
   /// Whether a space separates each token from its predecessor when they share a line. Depends
   /// only on tokens and marks, so it is recomputed only by an [#analyze] pass that added a mark
   /// bit; later passes reuse it for width checks and emit.
@@ -316,6 +404,7 @@ final class Printer {
     @SuppressWarnings("unchecked")
     EnumSet<Classification>[] tokenClasses = (EnumSet<Classification>[]) new EnumSet<?>[n];
     this.tokenClasses = tokenClasses;
+    this.tokenSym = new Sym[n];
     this.spaceBefore = new boolean[n];
     this.openerStack = new int[n];
     this.prefixWidth = new int[n + 1];
@@ -326,6 +415,7 @@ final class Printer {
       tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
       prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
       tokenClasses[i] = Classification.of(t);
+      tokenSym[i] = Sym.of(text);
     }
     computeBracketMatches();
     computeBreaks();
@@ -2259,32 +2349,39 @@ final class Printer {
   private boolean spaceBetween(int prevIndex, int nextIndex) {
     Token prev = tokens.get(prevIndex);
     Token next = tokens.get(nextIndex);
+    Sym prevSym = tokenSym[prevIndex];
+    Sym nextSym = tokenSym[nextIndex];
 
     if (prev.isComment() || next.isComment()) {
       return true;
     }
-    if (next.is(";") || next.is(",")) {
+    if (nextSym == Sym.SEMI || nextSym == Sym.COMMA) {
       return false;
     }
-    if (prev.is("(") || prev.is("[")) {
+    if (prevSym == Sym.LPAREN || prevSym == Sym.LBRACKET) {
       return false;
     }
-    if (next.is(")") || next.is("]")) {
+    if (nextSym == Sym.RPAREN || nextSym == Sym.RBRACKET) {
       return false;
     }
-    if (prev.is(".") || next.is(".") || prev.is("::") || next.is("::")) {
+    if (
+      prevSym == Sym.DOT
+        || nextSym == Sym.DOT
+        || prevSym == Sym.METHOD_REF
+        || nextSym == Sym.METHOD_REF
+    ) {
       return false;
     }
-    if (prev.is("@")) {
+    if (prevSym == Sym.AT) {
       return false;
     }
-    if (next.is("...")) {
+    if (nextSym == Sym.ELLIPSIS) {
       return false;
     }
-    if (prev.is("...")) {
+    if (prevSym == Sym.ELLIPSIS) {
       return true;
     }
-    if (prev.is("->") || next.is("->")) {
+    if (prevSym == Sym.ARROW || nextSym == Sym.ARROW) {
       return true;
     }
     if (marks.isUnary(nextIndex)) {
@@ -2299,10 +2396,11 @@ final class Printer {
     // Generic angle brackets bind tightly; a space follows only a list-closing `>` before a word.
     if (marks.isGenericAngle(nextIndex)) {
       // Type-parameter declarations keep a space after the modifier: `public <T> T get(..)`.
-      return next.is("<") && hasClass(prevIndex, Classification.MODIFIER);
+      return nextSym == Sym.LT && hasClass(prevIndex, Classification.MODIFIER);
     }
     if (marks.isGenericAngle(prevIndex)) {
-      return !prev.is("<") && (next.kind() != Kind.PUNCT || next.is("{") || next.is("@"));
+      return prevSym != Sym.LT
+        && (next.kind() != Kind.PUNCT || nextSym == Sym.LBRACE || nextSym == Sym.AT);
     }
     if (marks.isWildcard(prevIndex)) {
       return next.kind() != Kind.PUNCT;
@@ -2310,33 +2408,33 @@ final class Printer {
     if (marks.isWildcard(nextIndex)) {
       return true; // after `<` or `,`; `<` was handled above
     }
-    if (next.is(":")) {
+    if (nextSym == Sym.COLON) {
       return !marks.isColonNoSpaceBefore(nextIndex);
     }
-    if (prev.is(":")) {
+    if (prevSym == Sym.COLON) {
       return true;
     }
-    if (prev.is("{") && next.is("}")) {
+    if (prevSym == Sym.LBRACE && nextSym == Sym.RBRACE) {
       return false;
     }
-    if (next.is("{") || prev.is("{") || next.is("}")) {
+    if (nextSym == Sym.LBRACE || prevSym == Sym.LBRACE || nextSym == Sym.RBRACE) {
       return true;
     }
-    if (prev.is("}")) {
-      return !next.is("(") && !next.is("[");
+    if (prevSym == Sym.RBRACE) {
+      return nextSym != Sym.LPAREN && nextSym != Sym.LBRACKET;
     }
-    if (next.is("(")) {
+    if (nextSym == Sym.LPAREN) {
       return hasClass(prevIndex, Classification.PAREN_KEYWORD)
-        || prev.is("do")
-        || prev.is("else")
+        || prevSym == Sym.DO
+        || prevSym == Sym.ELSE
         || hasClass(prevIndex, Classification.BINARY_OPERATOR) && !marks.isGenericAngle(prevIndex)
-        || prev.is(";")
-        || prev.is(",");
+        || prevSym == Sym.SEMI
+        || prevSym == Sym.COMMA;
     }
-    if (next.is("[")) {
+    if (nextSym == Sym.LBRACKET) {
       return false;
     }
-    if (prev.is(";") || prev.is(",")) {
+    if (prevSym == Sym.SEMI || prevSym == Sym.COMMA) {
       return true;
     }
     if (
@@ -2350,33 +2448,34 @@ final class Printer {
     if (prevWord && nextWord) {
       return true;
     }
-    if (next.is("@")) {
+    if (nextSym == Sym.AT) {
       return prevWord;
     }
-    if (prev.is(")") || prev.is("]")) {
+    if (prevSym == Sym.RPAREN || prevSym == Sym.RBRACKET) {
       return nextWord;
     }
-    if (prevWord && (next.is("!") || next.is("~"))) {
+    if (prevWord && (nextSym == Sym.BANG || nextSym == Sym.TILDE)) {
       return true; // e.g. `return !x` when the operator was not marked (defensive)
     }
     return false;
   }
 
   private boolean spaceBeforePrefix(int prevIndex) {
-    Token prev = tokens.get(prevIndex);
+    Sym prevSym = tokenSym[prevIndex];
     if (
-      prev.is("(")
-        || prev.is("[")
-        || prev.is("!")
-        || prev.is("~")
-        || prev.is("@")
-        || prev.is(".")
-        || prev.is("::")
+      prevSym == Sym.LPAREN
+        || prevSym == Sym.LBRACKET
+        || prevSym == Sym.BANG
+        || prevSym == Sym.TILDE
+        || prevSym == Sym.AT
+        || prevSym == Sym.DOT
+        || prevSym == Sym.METHOD_REF
     ) {
       return false;
     }
     if (marks.isUnary(prevIndex)) {
-      return prev.is("+") || prev.is("-"); // keep `- -x` apart so it cannot re-lex as `--`
+      // Keep `- -x` apart so it cannot re-lex as `--`.
+      return prevSym == Sym.PLUS || prevSym == Sym.MINUS;
     }
     return true;
   }
