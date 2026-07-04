@@ -142,13 +142,14 @@ final class Printer {
   private void computeBracketMatches() {
     Arrays.fill(matchOpen, -1);
     Arrays.fill(matchClose, -1);
-    Deque<Integer> openers = new ArrayDeque<>();
+    int[] openers = new int[tokens.size()];
+    int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
       if (t.is("(") || t.is("[") || t.is("{")) {
-        openers.push(i);
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
-        int o = openers.pop();
+        openers[depth++] = i;
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
+        int o = openers[--depth];
         matchClose[o] = i;
         matchOpen[i] = o;
       }
@@ -575,13 +576,14 @@ final class Printer {
     int n = in.size();
     int[] mc = new int[n];
     Arrays.fill(mc, -1);
-    Deque<Integer> openers = new ArrayDeque<>();
+    int[] openers = new int[n];
+    int depth = 0;
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
       if (t.is("(") || t.is("[") || t.is("{")) {
-        openers.push(i);
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && !openers.isEmpty()) {
-        mc[openers.pop()] = i;
+        openers[depth++] = i;
+      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
+        mc[openers[--depth]] = i;
       }
     }
     return mc;
