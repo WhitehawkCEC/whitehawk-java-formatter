@@ -56,29 +56,6 @@ final class Printer {
     "assert",
     "yield"
   );
-  private static final Set<String> PRIMITIVES = Set.of(
-    "boolean",
-    "byte",
-    "char",
-    "short",
-    "int",
-    "long",
-    "float",
-    "double",
-    "void"
-  );
-  private static final Set<String> MODIFIER_KEYWORDS = Set.of(
-    "public",
-    "private",
-    "protected",
-    "static",
-    "final",
-    "default",
-    "abstract",
-    "synchronized",
-    "native",
-    "strictfp"
-  );
   private static final Set<String> BINARY_OPERATORS = Set.of(
     "=",
     "+=",
@@ -179,13 +156,13 @@ final class Printer {
           classes.add(BINARY_OPERATOR);
         }
       } else if (t.kind() == Kind.IDENT) {
-        if (JavaLexer.KEYWORDS.contains(t.text())) {
+        if (t.isKeyword()) {
           classes.add(KEYWORD);
         }
-        if (PRIMITIVES.contains(t.text())) {
+        if (t.isPrimitive()) {
           classes.add(PRIMITIVE);
         }
-        if (MODIFIER_KEYWORDS.contains(t.text())) {
+        if (t.isModifier()) {
           classes.add(MODIFIER);
         }
         if (PAREN_KEYWORDS.contains(t.text())) {
@@ -404,7 +381,7 @@ final class Printer {
       String name = null;
       for (int i = range[1] - 1; i > range[0]; i--) {
         Token t = in.get(i);
-        if (t.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(t.text())) {
+        if (t.kind() == Kind.IDENT && !t.isKeyword()) {
           name = t.text();
           break;
         }
@@ -520,7 +497,7 @@ final class Printer {
   /// identifier immediately followed by `->`, not reached from a `case` label.
   private static boolean isBareLambdaParam(List<Token> in, int i) {
     Token t = in.get(i);
-    if (t.kind() != Kind.IDENT || JavaLexer.KEYWORDS.contains(t.text())) {
+    if (t.kind() != Kind.IDENT || t.isKeyword()) {
       return false;
     }
     int arrow = nextCodeIndex(in, i);
@@ -547,7 +524,7 @@ final class Printer {
         || p.is("]")
         || p.is("extends")
         || p.is("super")
-        || p.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(p.text());
+        || p.kind() == Kind.IDENT && !p.isKeyword();
       if (!labelPart) {
         break;
       }
@@ -576,7 +553,7 @@ final class Printer {
         elementTokens = 0;
         continue;
       }
-      if (++elementTokens > 1 || t.kind() != Kind.IDENT || JavaLexer.KEYWORDS.contains(t.text())) {
+      if (++elementTokens > 1 || t.kind() != Kind.IDENT || t.isKeyword()) {
         return null;
       }
       lastIdent = i;
@@ -1006,7 +983,7 @@ final class Printer {
       || t.kind() == Kind.TEXT_BLOCK
       || t.kind() == Kind.CHAR
       || t.kind() == Kind.NUMBER
-      || t.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(t.text());
+      || t.kind() == Kind.IDENT && !t.isKeyword();
   }
 
   private void buildLines() {
@@ -1942,7 +1919,7 @@ final class Printer {
     if (prev == null) {
       return -1;
     }
-    boolean plausiblePrev = prev.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(prev.text())
+    boolean plausiblePrev = prev.kind() == Kind.IDENT && !prev.isKeyword()
       || prev.is(".")
       || prev.is(",")
       || prev.is("(")
@@ -2026,9 +2003,9 @@ final class Printer {
         }
       } else if (t.kind() == Kind.IDENT) {
         if (
-          JavaLexer.KEYWORDS.contains(t.text())
+          t.isKeyword()
             && !TYPE_ARG_PUNCT.contains(t.text())
-            && !PRIMITIVES.contains(t.text())
+            && !t.isPrimitive()
         ) {
           return -1;
         }
