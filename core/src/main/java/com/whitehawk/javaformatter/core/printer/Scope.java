@@ -5,8 +5,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Deque;
 
-/// Mutable and pooled: [Printer#analyze] runs once per wrap iteration, so scopes are recycled
-/// across passes (see [Printer#newScope]) instead of reallocated per bracket per pass.
+/// Mutable and pooled: recycled across passes instead of reallocated per bracket per pass.
 @NullMarked
 final class Scope {
   char kind; // B=block, S=switch body, E=enum body, P=paren, K=bracket, A=array initializer
@@ -20,8 +19,7 @@ final class Scope {
   boolean sawAssert;
   boolean caseLabel;
   int generic;
-  /// Branch-line indent of each open ternary in the current element, innermost first. Lazy:
-  /// most scopes never hold a ternary.
+  /// Innermost open ternary first. Lazy — most scopes never hold one.
   @Nullable Deque<Integer> ternaryIndents;
   // Cast detection: content so far could be a type reference.
   boolean typeLike;

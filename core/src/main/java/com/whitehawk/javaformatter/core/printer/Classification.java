@@ -8,8 +8,7 @@ import org.jspecify.annotations.NullMarked;
 
 import java.util.Set;
 
-/// A class a token's text can belong to, resolved once per token (see [#classify]) so hot paths
-/// avoid repeated set lookups.
+/// A class a token's text can belong to; resolved once so hot paths avoid repeated set lookups.
 @NullMarked
 enum Classification {
   KEYWORD,
@@ -70,8 +69,8 @@ enum Classification {
     "->"
   );
 
-  /// Records the classes of the token at `i` into `classes`. Every classifying set entry is
-  /// either identifier-shaped or an operator, so only the matching token kind is probed.
+  /// Every classifying set entry is either identifier-shaped or an operator, so only the matching
+  /// token kind is probed.
   static void classify(ArraySmallEnumSet<Classification> classes, int i, Token t) {
     if (t.kind() == Kind.PUNCT) {
       if (BINARY_OPERATORS.contains(t.text())) {

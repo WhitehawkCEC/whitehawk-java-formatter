@@ -5,9 +5,8 @@ import org.jspecify.annotations.NullMarked;
 import java.util.HashMap;
 import java.util.Map;
 
-/// Texts the printer dispatches on, resolved once per token (see [Printer#tokenSym]) so hot paths
-/// compare or switch on a symbol instead of running chains of string comparisons. [#OTHER]
-/// covers every text no dispatch names.
+/// A canonical text the printer dispatches on, so hot paths switch on a symbol instead of running
+/// chains of string comparisons. [#OTHER] covers every text no symbol names.
 @NullMarked
 enum Sym {
   OTHER(""),

@@ -2,7 +2,7 @@ package com.whitehawk.javaformatter.core.printer;
 
 import org.jspecify.annotations.NullMarked;
 
-/// A per-token role resolved by the analysis pass.
+/// A per-token role.
 @NullMarked
 enum Mark {
   GENERIC_ANGLE,
