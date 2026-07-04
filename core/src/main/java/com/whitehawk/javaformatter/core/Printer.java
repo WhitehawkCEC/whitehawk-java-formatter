@@ -1176,7 +1176,7 @@ final class Printer {
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
       if (marks.isGenericAngle(i)) {
-        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        generic += angleDepthDelta(i);
         continue;
       }
       if (isOpener(i)) {
@@ -1294,7 +1294,7 @@ final class Printer {
         return -1;
       }
       if (marks.isGenericAngle(j)) {
-        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
       } else if (isCloser(j)) {
@@ -1313,7 +1313,7 @@ final class Printer {
     for (int j = i; j <= end; j++) {
       Token t = tokens.get(j);
       if (marks.isGenericAngle(j)) {
-        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
         depth++;
       } else if (isCloser(j)) {
@@ -1453,7 +1453,7 @@ final class Printer {
     for (int i = open + 1; i < close; i++) {
       Token t = tokens.get(i);
       if (marks.isGenericAngle(i)) {
-        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+        generic += angleDepthDelta(i);
         continue;
       }
       if (isOpener(i)) {
@@ -1551,6 +1551,18 @@ final class Printer {
       }
     }
     return false;
+  }
+
+  /// Angle-bracket depth change of the angle token at `i`: +1 for `<`; -1, -2, -3 for `>`, `>>`,
+  /// `>>>`; 0 for any other token.
+  private int angleDepthDelta(int i) {
+    return switch (tokenSym[i]) {
+      case LT -> 1;
+      case GT -> -1;
+      case GT_GT -> -2;
+      case GT_GT_GT -> -3;
+      default -> 0;
+    };
   }
 
   /// Lines partition the tokens in order, so binary search by token index.
@@ -1770,7 +1782,7 @@ final class Printer {
       }
       case GT, GT_GT, GT_GT_GT -> {
         if (marks.isGenericAngle(i)) {
-          top.generic = Math.max(0, top.generic - t.text().length());
+          top.generic = Math.max(0, top.generic + angleDepthDelta(i));
         } else {
           afterContentToken(top, false);
         }
