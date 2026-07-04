@@ -3,7 +3,6 @@ package com.whitehawk.javaformatter.core;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -49,15 +48,6 @@ public final class JavaLexer {
     "void", "volatile", "while",
     "true", "false", "null",
     "var", "yield", "record", "sealed", "permits", "when", "_"
-  );
-
-  private static final List<String> OPERATORS = List.of(
-    ">>>=",
-    ">>>", "<<=", ">>=", "...",
-    "->", "::", "==", "!=", "<=", ">=", "&&", "||", "++", "--",
-    "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<", ">>",
-    "(", ")", "{", "}", "[", "]", ";", ",", ".", "=", "<", ">",
-    "+", "-", "*", "/", "%", "&", "|", "^", "!", "~", "?", ":", "@"
   );
 
   private final String src;
@@ -148,14 +138,77 @@ public final class JavaLexer {
         return Kind.BLOCK_COMMENT;
       }
     }
-    for (String op : OPERATORS) {
-      if (src.startsWith(op, pos)) {
-        pos += op.length();
-        return Kind.PUNCT;
-      }
-    }
-    pos++;
+    consumeOperator(c);
     return Kind.PUNCT;
+  }
+
+  /// Advances past the operator starting at `pos`, dispatching on its first character `c`; a
+  /// character that starts no multi-char operator is consumed alone.
+  private void consumeOperator(char c) {
+    pos++;
+    char c1 = pos < src.length() ? src.charAt(pos) : '\0';
+    switch (c) {
+      case '=', '!', '*', '/', '%', '^' -> {
+        if (c1 == '=') {
+          pos++;
+        }
+      }
+      case ':' -> {
+        if (c1 == ':') {
+          pos++;
+        }
+      }
+      case '+' -> {
+        if (c1 == '+' || c1 == '=') {
+          pos++;
+        }
+      }
+      case '-' -> {
+        if (c1 == '-' || c1 == '=' || c1 == '>') {
+          pos++;
+        }
+      }
+      case '&' -> {
+        if (c1 == '&' || c1 == '=') {
+          pos++;
+        }
+      }
+      case '|' -> {
+        if (c1 == '|' || c1 == '=') {
+          pos++;
+        }
+      }
+      case '.' -> {
+        // `...` is the only multi-char dot operator; `..` lexes as two dots.
+        if (c1 == '.' && pos + 1 < src.length() && src.charAt(pos + 1) == '.') {
+          pos += 2;
+        }
+      }
+      case '<' -> {
+        if (c1 == '=') {
+          pos++;
+        } else if (c1 == '<') {
+          pos++;
+          if (pos < src.length() && src.charAt(pos) == '=') {
+            pos++;
+          }
+        }
+      }
+      case '>' -> {
+        if (c1 == '=') {
+          pos++;
+        } else if (c1 == '>') {
+          pos++;
+          if (pos < src.length() && src.charAt(pos) == '>') {
+            pos++;
+          }
+          if (pos < src.length() && src.charAt(pos) == '=') {
+            pos++;
+          }
+        }
+      }
+      default -> {}
+    }
   }
 
   private void consumeNumber() {
