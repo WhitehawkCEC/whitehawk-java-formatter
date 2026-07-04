@@ -5,3 +5,7 @@ idiomatic_version_file_enable_tools = ["pnpm"]
 [tools]
 java = "graalvm-community-25.0.2"
 node = "lts"
+
+[tasks.format-java]
+description = "Format the repo's Java sources in place"
+run = "./mvnw -q -pl app-cli -am -Pformat-java process-classes"
