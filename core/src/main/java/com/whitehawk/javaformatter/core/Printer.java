@@ -292,6 +292,9 @@ final class Printer {
   /// only on tokens and marks, so it is recomputed only by an [#analyze] pass that added a mark
   /// bit; later passes reuse it for width checks and emit.
   private final boolean[] spaceBefore;
+  /// Opener-stack scratch for [#breakGroupElements], allocated once: the pass re-runs every
+  /// iteration of the wrap loop.
+  private final int[] openerStack;
 
   Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
@@ -308,6 +311,7 @@ final class Printer {
     EnumSet<Classification>[] tokenClasses = (EnumSet<Classification>[]) new EnumSet<?>[n];
     this.tokenClasses = tokenClasses;
     this.spaceBefore = new boolean[n];
+    this.openerStack = new int[n];
     for (int i = 0; i < n; i++) {
       Token t = this.tokens.get(i);
       String text = t.text();
@@ -1066,7 +1070,6 @@ final class Printer {
     // A marked type-argument list never contains `(`, so any angle open at a comma opened after
     // the comma's enclosing paren: a running depth replaces a per-comma rescan.
     int generic = 0;
-    int[] openers = new int[tokens.size()];
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
@@ -1075,11 +1078,11 @@ final class Printer {
         continue;
       }
       if (isOpener(i)) {
-        openers[depth++] = i;
+        openerStack[depth++] = i;
       } else if (isCloser(i) && depth > 0) {
         depth--;
       } else if (t.is(",") && generic == 0 && depth > 0) {
-        int o = openers[depth - 1];
+        int o = openerStack[depth - 1];
         if (tokens.get(o).is("(") && breakBefore[o + 1]) {
           // The break starts the next element, but a trailing comment on the comma's line stays
           // put: skip past it so the comment is not pushed onto its own line.
