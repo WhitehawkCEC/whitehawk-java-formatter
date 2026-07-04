@@ -260,15 +260,15 @@ public final class Printer {
     return isStringLiteral(prev) || isStringLiteral(next);
   }
 
-  /// An already-broken `&&`/`||` spreads its break to every same-text operator in the element, so
-  /// a condition wrapped at one operand wraps at every operand of that precedence.
+  /// An already-broken `&&`/`||` spreads its break to every logical operator in the element, so a
+  /// condition wrapped at one operand wraps at every `&&`/`||` operand — mixed precedences all
+  /// break together rather than leaving one precedence crammed onto an overflowing line.
   private void forceLogicalBreaks() {
     // An operator reached by an earlier operator's spread needs no scan of its own: the spread
-    // already covered every same-text operator of the element.
+    // already covered every logical operator of the element.
     boolean[] spread = new boolean[tokens.size()];
     for (int i = 0; i < tokens.size(); i++) {
-      Sym op = tokenSym[i];
-      if (!breakBefore[i] || spread[i] || op != Sym.AMP_AMP && op != Sym.BAR_BAR) {
+      if (!breakBefore[i] || spread[i] || !isLogicalOp(i)) {
         continue;
       }
       forcedBreak[i] = true;
@@ -277,7 +277,7 @@ public final class Printer {
           j = matchOpen[j]; // a nested group is skipped whole
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (tokenSym[j] == op) {
+        } else if (isLogicalOp(j)) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
         }
@@ -287,13 +287,17 @@ public final class Printer {
           j = matchClose[j];
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (tokenSym[j] == op) {
+        } else if (isLogicalOp(j)) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
           spread[j] = true;
         }
       }
     }
+  }
+
+  private boolean isLogicalOp(int i) {
+    return tokenSym[i] == Sym.AMP_AMP || tokenSym[i] == Sym.BAR_BAR;
   }
 
   private boolean endsOperatorElement(int i) {
