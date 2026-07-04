@@ -197,6 +197,8 @@ final class Printer {
     ASSIGN("="),
     AMP("&"),
     BAR("|"),
+    AMP_AMP("&&"),
+    BAR_BAR("||"),
     BANG("!"),
     TILDE("~"),
     PLUS("+"),
@@ -231,7 +233,8 @@ final class Printer {
     FALSE("false"),
     NULL("null"),
     FOR("for"),
-    TRY("try");
+    TRY("try"),
+    THROWS("throws");
 
     private static final Map<String, Sym> BY_TEXT = new HashMap<>();
 
@@ -920,7 +923,7 @@ final class Printer {
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
     // preceding token is a line comment, which would otherwise swallow the rest of the line.
     for (int i = 1; i < n; i++) {
-      if (tokens.get(i).is("throws") && tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
+      if (tokenSym[i] == Sym.THROWS && tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
         breakBefore[i] = false;
       }
     }
@@ -979,10 +982,10 @@ final class Printer {
       return false;
     }
     for (int j = indexOfPrevCode(name); j >= 0;) {
-      if (tokens.get(j).is("@")) {
+      if (tokenSym[j] == Sym.AT) {
         return true;
       }
-      if (!tokens.get(j).is(".")) {
+      if (tokenSym[j] != Sym.DOT) {
         return false;
       }
       int qualifier = indexOfPrevCode(j);
@@ -996,7 +999,7 @@ final class Printer {
 
   /// A `.` that begins a method call: `. name (`.
   private boolean isCallDot(int p) {
-    if (!tokens.get(p).is(".")) {
+    if (tokenSym[p] != Sym.DOT) {
       return false;
     }
     int name = indexOfNextCode(p);
@@ -1004,7 +1007,7 @@ final class Printer {
       return false;
     }
     int paren = indexOfNextCode(name);
-    return paren >= 0 && tokens.get(paren).is("(");
+    return paren >= 0 && tokenSym[paren] == Sym.LPAREN;
   }
 
   /// Preserves an intentionally wrapped string concatenation: a `+` the input already broke before
@@ -1021,7 +1024,7 @@ final class Printer {
   /// A binary `+` that concatenates a string: one operand is a string or text-block literal and the
   /// token before it ends an operand (so it is not a unary sign).
   private boolean isStringConcatPlus(int i) {
-    if (!tokens.get(i).is("+")) {
+    if (tokenSym[i] != Sym.PLUS) {
       return false;
     }
     Token prev = prevCode(i);
@@ -1040,18 +1043,17 @@ final class Printer {
     // already covered every same-text operator of the element.
     boolean[] spread = new boolean[tokens.size()];
     for (int i = 0; i < tokens.size(); i++) {
-      Token t = tokens.get(i);
-      if (!breakBefore[i] || spread[i] || !t.is("&&") && !t.is("||")) {
+      Sym op = tokenSym[i];
+      if (!breakBefore[i] || spread[i] || op != Sym.AMP_AMP && op != Sym.BAR_BAR) {
         continue;
       }
       forcedBreak[i] = true;
-      String op = t.text();
       for (int j = i - 1; j >= 0; j--) {
         if (isCloser(j) && matchOpen[j] >= 0) {
           j = matchOpen[j]; // a nested group is skipped whole
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (tokens.get(j).is(op)) {
+        } else if (tokenSym[j] == op) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
         }
@@ -1061,7 +1063,7 @@ final class Printer {
           j = matchClose[j];
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (tokens.get(j).is(op)) {
+        } else if (tokenSym[j] == op) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
           spread[j] = true;
@@ -1073,15 +1075,10 @@ final class Printer {
   /// Bounds the element scan of [#forceLogicalBreaks]: any bracket still unskipped (the enclosing
   /// group's edge or an unmatched one) or a separator ending the operand run.
   private boolean endsOperatorElement(int i) {
-    Token t = tokens.get(i);
-    return isOpener(i)
-      || isCloser(i)
-      || t.is(",")
-      || t.is(";")
-      || t.is("?")
-      || t.is(":")
-      || t.is("->")
-      || t.is("=");
+    return isOpener(i) || isCloser(i) || switch (tokenSym[i]) {
+      case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
+      default -> false;
+    };
   }
 
   private static boolean isStringLiteral(Token t) {
