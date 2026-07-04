@@ -160,7 +160,8 @@ final class Printer {
     }
   }
 
-  /// Per-token roles resolved by the analysis pass, one bit per role.
+  /// Per-token roles resolved by the analysis pass, one bit per role. Tracks whether any bit was
+  /// added so a caller can skip recomputing state derived from the roles.
   private static final class Marks {
     private static final byte GENERIC_ANGLE = 1;
     private static final byte WILDCARD = 2;
@@ -171,13 +172,25 @@ final class Printer {
     private static final byte ANGLE_SCANNED = 32;
 
     private final byte[] bits;
+    /// Starts true so the first [#consumeChanged] caller computes its derived state.
+    private boolean changed = true;
 
     Marks(int size) {
       this.bits = new byte[size];
     }
 
+    /// Whether a bit was added since the previous call.
+    boolean consumeChanged() {
+      boolean was = changed;
+      changed = false;
+      return was;
+    }
+
     private void set(int i, byte bit) {
-      bits[i] |= bit;
+      if ((bits[i] & bit) == 0) {
+        bits[i] |= bit;
+        changed = true;
+      }
     }
 
     private boolean has(int i, byte bit) {
@@ -251,7 +264,8 @@ final class Printer {
   /// Output width per token, or -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
   /// Whether a space separates each token from its predecessor when they share a line. Depends
-  /// only on tokens and marks, so each [#analyze] pass leaves it fresh for width checks and emit.
+  /// only on tokens and marks, so it is recomputed only by an [#analyze] pass that added a mark
+  /// bit; later passes reuse it for width checks and emit.
   private final boolean[] spaceBefore;
 
   Printer(List<Token> tokens) {
@@ -1503,8 +1517,10 @@ final class Printer {
         lines.get(ci).firstToken()
       ).atColumn0() ? 0 : stack.peek().contentIndent;
     }
-    for (int i = 1; i < tokens.size(); i++) {
-      spaceBefore[i] = spaceBetween(i - 1, i);
+    if (marks.consumeChanged()) {
+      for (int i = 1; i < tokens.size(); i++) {
+        spaceBefore[i] = spaceBetween(i - 1, i);
+      }
     }
   }
 
