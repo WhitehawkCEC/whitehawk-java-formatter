@@ -128,15 +128,6 @@ final class Printer {
   );
   private static final int TYPE_ARG_SCAN_LIMIT = 500;
 
-  // Per-token roles resolved by the analysis pass.
-  private static final byte GENERIC_ANGLE = 1;
-  private static final byte WILDCARD = 2;
-  private static final byte UNARY = 4;
-  private static final byte CAST_CLOSE = 8;
-  private static final byte COLON_NO_SPACE_BEFORE = 16;
-  /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
-  private static final byte ANGLE_SCANNED = 32;
-
   private record Line(int firstToken, int tokenCount, int blanksBefore) {}
 
   private static final class Scope {
@@ -169,9 +160,82 @@ final class Printer {
     }
   }
 
+  /// Per-token roles resolved by the analysis pass, one bit per role.
+  private static final class Marks {
+    private static final byte GENERIC_ANGLE = 1;
+    private static final byte WILDCARD = 2;
+    private static final byte UNARY = 4;
+    private static final byte CAST_CLOSE = 8;
+    private static final byte COLON_NO_SPACE_BEFORE = 16;
+    /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
+    private static final byte ANGLE_SCANNED = 32;
+
+    private final byte[] bits;
+
+    Marks(int size) {
+      this.bits = new byte[size];
+    }
+
+    private void set(int i, byte bit) {
+      bits[i] |= bit;
+    }
+
+    private boolean has(int i, byte bit) {
+      return (bits[i] & bit) != 0;
+    }
+
+    void setGenericAngle(int i) {
+      set(i, GENERIC_ANGLE);
+    }
+
+    boolean isGenericAngle(int i) {
+      return has(i, GENERIC_ANGLE);
+    }
+
+    void setWildcard(int i) {
+      set(i, WILDCARD);
+    }
+
+    boolean isWildcard(int i) {
+      return has(i, WILDCARD);
+    }
+
+    void setUnary(int i) {
+      set(i, UNARY);
+    }
+
+    boolean isUnary(int i) {
+      return has(i, UNARY);
+    }
+
+    void setCastClose(int i) {
+      set(i, CAST_CLOSE);
+    }
+
+    boolean isCastClose(int i) {
+      return has(i, CAST_CLOSE);
+    }
+
+    void setColonNoSpaceBefore(int i) {
+      set(i, COLON_NO_SPACE_BEFORE);
+    }
+
+    boolean isColonNoSpaceBefore(int i) {
+      return has(i, COLON_NO_SPACE_BEFORE);
+    }
+
+    void setAngleScanned(int i) {
+      set(i, ANGLE_SCANNED);
+    }
+
+    boolean isAngleScanned(int i) {
+      return has(i, ANGLE_SCANNED);
+    }
+  }
+
   private final List<Token> tokens;
   private final List<Line> lines = new ArrayList<>();
-  private final byte[] marks;
+  private final Marks marks;
   private int[] lineIndent;
   /// True where a line break must precede the token; seeded from input newlines, then normalized.
   private final boolean[] breakBefore;
@@ -193,7 +257,7 @@ final class Printer {
   Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
     int n = this.tokens.size();
-    this.marks = new byte[n];
+    this.marks = new Marks(n);
     this.breakBefore = new boolean[n];
     this.forcedBreak = new boolean[n];
     this.tokenLine = new int[n];
@@ -947,7 +1011,7 @@ final class Printer {
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
       Token t = tokens.get(i);
-      if ((marks[i] & GENERIC_ANGLE) != 0) {
+      if (marks.isGenericAngle(i)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
         continue;
       }
@@ -1066,7 +1130,7 @@ final class Printer {
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
         return -1;
       }
-      if ((marks[j] & GENERIC_ANGLE) != 0) {
+      if (marks.isGenericAngle(j)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
       } else if (t.is("(") || t.is("[") || t.is("{")) {
         depth++;
@@ -1085,7 +1149,7 @@ final class Printer {
     int generic = 0;
     for (int j = i; j <= end; j++) {
       Token t = tokens.get(j);
-      if ((marks[j] & GENERIC_ANGLE) != 0) {
+      if (marks.isGenericAngle(j)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
       } else if (t.is("(") || t.is("[") || t.is("{")) {
         depth++;
@@ -1094,7 +1158,7 @@ final class Printer {
       } else if (
         depth == 0
           && generic == 0
-          && (marks[j] & WILDCARD) == 0
+          && !marks.isWildcard(j)
           && (t.is("?") || t.is(":") && !ops.isEmpty())
       ) {
         ops.add(j);
@@ -1234,7 +1298,7 @@ final class Printer {
     int generic = 0;
     for (int i = open + 1; i < close; i++) {
       Token t = tokens.get(i);
-      if ((marks[i] & GENERIC_ANGLE) != 0) {
+      if (marks.isGenericAngle(i)) {
         generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
         continue;
       }
@@ -1449,7 +1513,7 @@ final class Printer {
   /// level past the previous line for `?`, aligned with the matching `?` for `:`.
   private int continuationIndent(Scope top, int firstToken, int prevIndent) {
     Token first = tokens.get(firstToken);
-    if (first.is("?") && (marks[firstToken] & WILDCARD) == 0) {
+    if (first.is("?") && !marks.isWildcard(firstToken)) {
       return prevIndent + INDENT;
     }
     if (first.is(":") && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
@@ -1531,7 +1595,7 @@ final class Printer {
           stack.pop();
         }
         if (t.is(")") && isCast(closed, i)) {
-          marks[i] |= CAST_CLOSE;
+          marks.setCastClose(i);
         }
         afterContentToken(stack.peek(), t.is("]")); // `]` can end an array type in a cast
         return;
@@ -1561,14 +1625,14 @@ final class Printer {
         return;
       }
       case "<" -> {
-        if ((marks[i] & (GENERIC_ANGLE | ANGLE_SCANNED)) == 0) {
-          marks[i] |= ANGLE_SCANNED;
+        if (!marks.isGenericAngle(i) && !marks.isAngleScanned(i)) {
+          marks.setAngleScanned(i);
           int end = typeArgumentsEnd(i);
           if (end >= 0) {
             markTypeArguments(i, end);
           }
         }
-        if ((marks[i] & GENERIC_ANGLE) != 0) {
+        if (marks.isGenericAngle(i)) {
           top.generic++;
         } else {
           afterContentToken(top, false);
@@ -1576,7 +1640,7 @@ final class Printer {
         return;
       }
       case ">", ">>", ">>>" -> {
-        if ((marks[i] & GENERIC_ANGLE) != 0) {
+        if (marks.isGenericAngle(i)) {
           top.generic = Math.max(0, top.generic - t.text().length());
         } else {
           afterContentToken(top, false);
@@ -1585,7 +1649,7 @@ final class Printer {
       }
       case "?" -> {
         if (top.generic > 0) {
-          marks[i] |= WILDCARD;
+          marks.setWildcard(i);
         } else {
           if (top.ternaryIndents == null) {
             top.ternaryIndents = new ArrayDeque<>();
@@ -1601,7 +1665,7 @@ final class Printer {
       }
       case "+", "-", "++", "--", "!", "~" -> {
         if (isUnaryPosition(i)) {
-          marks[i] |= UNARY;
+          marks.setUnary(i);
         }
         afterContentToken(top, false);
         return;
@@ -1691,7 +1755,7 @@ final class Printer {
       return;
     }
     if (top.kind == 'S' && top.caseLabel) {
-      marks[i] |= COLON_NO_SPACE_BEFORE;
+      marks.setColonNoSpaceBefore(i);
       closeElement(top);
       return;
     }
@@ -1699,7 +1763,7 @@ final class Printer {
       afterContentToken(top, false);
       return;
     }
-    marks[i] |= COLON_NO_SPACE_BEFORE; // labeled statement
+    marks.setColonNoSpaceBefore(i); // labeled statement
     closeElement(top);
   }
 
@@ -1799,7 +1863,7 @@ final class Printer {
         && !prev.is("null");
     }
     if (prev.is(")")) {
-      return (marks[indexOfPrevCode(i)] & CAST_CLOSE) != 0;
+      return marks.isCastClose(indexOfPrevCode(i));
     }
     return !prev.is("]") && !prev.is("++") && !prev.is("--");
   }
@@ -1911,13 +1975,13 @@ final class Printer {
   }
 
   private void markTypeArguments(int open, int end) {
-    marks[open] |= GENERIC_ANGLE;
+    marks.setGenericAngle(open);
     for (int i = open + 1; i <= end; i++) {
       Token t = tokens.get(i);
       if (t.is("<") || t.is(">") || t.is(">>") || t.is(">>>")) {
-        marks[i] |= GENERIC_ANGLE;
+        marks.setGenericAngle(i);
       } else if (t.is("?")) {
-        marks[i] |= WILDCARD;
+        marks.setWildcard(i);
       }
     }
   }
@@ -2045,7 +2109,7 @@ final class Printer {
       return false;
     }
     // A case-label or labeled-statement colon keeps its statement on the next line.
-    return !(prevLast.is(":") && (marks[prevLastIndex] & COLON_NO_SPACE_BEFORE) != 0);
+    return !(prevLast.is(":") && marks.isColonNoSpaceBefore(prevLastIndex));
   }
 
   private Token lastToken(int li) {
@@ -2185,31 +2249,31 @@ final class Printer {
     if (prev.is("->") || next.is("->")) {
       return true;
     }
-    if ((marks[nextIndex] & UNARY) != 0) {
+    if (marks.isUnary(nextIndex)) {
       return spaceBeforePrefix(prevIndex);
     }
-    if ((marks[prevIndex] & UNARY) != 0) {
+    if (marks.isUnary(prevIndex)) {
       return false;
     }
-    if ((marks[prevIndex] & CAST_CLOSE) != 0) {
+    if (marks.isCastClose(prevIndex)) {
       return true;
     }
     // Generic angle brackets bind tightly; a space follows only a list-closing `>` before a word.
-    if ((marks[nextIndex] & GENERIC_ANGLE) != 0) {
+    if (marks.isGenericAngle(nextIndex)) {
       // Type-parameter declarations keep a space after the modifier: `public <T> T get(..)`.
       return next.is("<") && MODIFIER_KEYWORDS.contains(prev.text());
     }
-    if ((marks[prevIndex] & GENERIC_ANGLE) != 0) {
+    if (marks.isGenericAngle(prevIndex)) {
       return !prev.is("<") && (next.kind() != Kind.PUNCT || next.is("{") || next.is("@"));
     }
-    if ((marks[prevIndex] & WILDCARD) != 0) {
+    if (marks.isWildcard(prevIndex)) {
       return next.kind() != Kind.PUNCT;
     }
-    if ((marks[nextIndex] & WILDCARD) != 0) {
+    if (marks.isWildcard(nextIndex)) {
       return true; // after `<` or `,`; `<` was handled above
     }
     if (next.is(":")) {
-      return (marks[nextIndex] & COLON_NO_SPACE_BEFORE) == 0;
+      return !marks.isColonNoSpaceBefore(nextIndex);
     }
     if (prev.is(":")) {
       return true;
@@ -2227,7 +2291,7 @@ final class Printer {
       return prev.kind() == Kind.IDENT && PAREN_KEYWORDS.contains(prev.text())
         || prev.is("do")
         || prev.is("else")
-        || BINARY_OPERATORS.contains(prev.text()) && (marks[prevIndex] & GENERIC_ANGLE) == 0
+        || BINARY_OPERATORS.contains(prev.text()) && !marks.isGenericAngle(prevIndex)
         || prev.is(";")
         || prev.is(",");
     }
@@ -2270,7 +2334,7 @@ final class Printer {
     ) {
       return false;
     }
-    if ((marks[prevIndex] & UNARY) != 0) {
+    if (marks.isUnary(prevIndex)) {
       return prev.is("+") || prev.is("-"); // keep `- -x` apart so it cannot re-lex as `--`
     }
     return true;
