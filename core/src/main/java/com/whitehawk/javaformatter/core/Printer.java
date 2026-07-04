@@ -1159,7 +1159,6 @@ final class Printer {
     int generic = 0;
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
-      Token t = tokens.get(i);
       if (marks.isGenericAngle(i)) {
         generic += angleDepthDelta(i);
         continue;
@@ -1168,9 +1167,9 @@ final class Printer {
         openerStack[depth++] = i;
       } else if (isCloser(i) && depth > 0) {
         depth--;
-      } else if (t.is(",") && generic == 0 && depth > 0) {
+      } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
         int o = openerStack[depth - 1];
-        if (tokens.get(o).is("(") && breakBefore[o + 1]) {
+        if (tokenSym[o] == Sym.LPAREN && breakBefore[o + 1]) {
           // The break starts the next element, but a trailing comment on the comma's line stays
           // put: skip past it so the comment is not pushed onto its own line.
           int target = i + 1;
@@ -1271,8 +1270,8 @@ final class Printer {
     int depth = 0;
     int generic = 0;
     for (int j = i; j < tokens.size(); j++) {
-      Token t = tokens.get(j);
-      if (depth == 0 && generic == 0 && (isCloser(j) || t.is(";") || t.is(","))) {
+      Sym sym = tokenSym[j];
+      if (depth == 0 && generic == 0 && (isCloser(j) || sym == Sym.SEMI || sym == Sym.COMMA)) {
         return j - 1;
       }
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
@@ -1296,7 +1295,6 @@ final class Printer {
     int depth = 0;
     int generic = 0;
     for (int j = i; j <= end; j++) {
-      Token t = tokens.get(j);
       if (marks.isGenericAngle(j)) {
         generic += angleDepthDelta(j);
       } else if (isOpener(j)) {
@@ -1307,7 +1305,7 @@ final class Printer {
         depth == 0
           && generic == 0
           && !marks.isWildcard(j)
-          && (t.is("?") || t.is(":") && !ops.isEmpty())
+          && (tokenSym[j] == Sym.QUESTION || tokenSym[j] == Sym.COLON && !ops.isEmpty())
       ) {
         ops.add(j);
       }
@@ -1423,7 +1421,7 @@ final class Printer {
   /// initializer whose group keeps its own lines.
   private boolean hasBraceInside(int open, int close) {
     for (int i = open + 1; i < close; i++) {
-      if (tokens.get(i).is("{")) {
+      if (tokenSym[i] == Sym.LBRACE) {
         return true;
       }
     }
@@ -1436,7 +1434,6 @@ final class Printer {
     int depth = 0;
     int generic = 0;
     for (int i = open + 1; i < close; i++) {
-      Token t = tokens.get(i);
       if (marks.isGenericAngle(i)) {
         generic += angleDepthDelta(i);
         continue;
@@ -1445,7 +1442,7 @@ final class Printer {
         depth++;
       } else if (isCloser(i)) {
         depth--;
-      } else if (t.is(",") && depth == 0 && generic == 0) {
+      } else if (tokenSym[i] == Sym.COMMA && depth == 0 && generic == 0) {
         return true;
       }
     }
@@ -1457,7 +1454,7 @@ final class Printer {
   /// chain the surrounding group already lays out multiline, so its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = enclosingOpen[dot]; o >= 0; o = enclosingOpen[o]) {
-      if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
+      if (tokenSym[o] == Sym.LPAREN && matchClose[o] > close && breakBefore[matchClose[o]]) {
         return true;
       }
     }
@@ -1470,7 +1467,7 @@ final class Printer {
   private boolean containsBrokenMultiArgCall(int open, int close) {
     for (int i = open + 1; i < close; i++) {
       if (
-        tokens.get(i).is("(")
+        tokenSym[i] == Sym.LPAREN
           && breakBefore[matchClose[i]]
           && hasTopLevelComma(i, matchClose[i])
       ) {
@@ -1488,21 +1485,21 @@ final class Printer {
   private boolean collapseControlFlowHeaders() {
     boolean changed = false;
     for (int open = 0; open < tokens.size(); open++) {
-      if (!tokens.get(open).is("(") || !breakBefore[open + 1]) {
+      if (tokenSym[open] != Sym.LPAREN || !breakBefore[open + 1]) {
         continue; // not an isolated paren
       }
       int close = matchClose[open];
-      Token keyword = prevCode(open);
-      if (close < 0 || keyword == null || !PAREN_KEYWORDS.contains(keyword.text())) {
+      int keyword = indexOfPrevCode(open);
+      if (close < 0 || keyword < 0 || !hasClass(keyword, Classification.PAREN_KEYWORD)) {
         continue;
       }
       int brace = indexOfNextCode(close);
-      if (brace < 0 || !tokens.get(brace).is("{")) {
+      if (brace < 0 || tokenSym[brace] != Sym.LBRACE) {
         continue; // not a block header (excludes `return (..)`, `throw (..)`, etc.)
       }
       // A try-with-resources listing multiple resources (a top-level `;`) keeps each resource on
       // its own line; only a single-resource header collapses.
-      if (keyword.is("try") && hasTopLevelSemicolon(open, close)) {
+      if (tokenSym[keyword] == Sym.TRY && hasTopLevelSemicolon(open, close)) {
         continue;
       }
       int li = lineIndexOf(open);
@@ -1531,7 +1528,7 @@ final class Printer {
         depth++;
       } else if (isCloser(i)) {
         depth--;
-      } else if (depth == 0 && tokens.get(i).is(";")) {
+      } else if (depth == 0 && tokenSym[i] == Sym.SEMI) {
         return true;
       }
     }
