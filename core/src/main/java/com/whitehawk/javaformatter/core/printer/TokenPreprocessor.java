@@ -25,13 +25,15 @@ final class TokenPreprocessor {
     );
   }
 
-  /// Canonical style terminates an enum's constant list with `;`. A list ending in a trailing comma
-  /// has no member section, so the comma is the last thing before the closing brace; append the
-  /// missing `;`. A list already ending in `;` (or a bare constant) is left untouched.
+  /// Canonical style terminates an enum's constant list with a trailing comma followed by `;`. A
+  /// list ending in a bare trailing comma (no `;`) gets the missing `;` appended; a list already
+  /// terminated by `;` but lacking the trailing comma gets one inserted before the `;`. A bare
+  /// constant (no comma, no `;`) is left untouched.
   private static List<Token> terminateEnumConstants(List<Token> in) {
     int n = in.size();
     int[] close = matchAllBrackets(in);
-    Set<Integer> insertAfter = new HashSet<>(); // append `;` after this comma
+    Set<Integer> appendSemiAfter = new HashSet<>(); // append `;` after this comma
+    Set<Integer> insertCommaBefore = new HashSet<>(); // insert `,` before this `;`
     for (int i = 0; i < n; i++) {
       if (!in.get(i).is("enum")) {
         continue;
@@ -43,23 +45,55 @@ final class TokenPreprocessor {
       if (bodyOpen >= n || close[bodyOpen] < 0) {
         continue;
       }
-      int last = prevCodeIndex(in, close[bodyOpen]);
-      if (last > bodyOpen && in.get(last).is(",")) {
-        insertAfter.add(last);
+      int semi = firstTopLevelSemicolon(in, close, bodyOpen);
+      if (semi < 0) {
+        int last = prevCodeIndex(in, close[bodyOpen]);
+        if (last > bodyOpen && in.get(last).is(",")) {
+          appendSemiAfter.add(last);
+        }
+        continue;
+      }
+      int prev = prevCodeIndex(in, semi);
+      if (prev > bodyOpen && !in.get(prev).is(",")) {
+        insertCommaBefore.add(semi);
       }
     }
-    if (insertAfter.isEmpty()) {
+    if (appendSemiAfter.isEmpty() && insertCommaBefore.isEmpty()) {
       return in;
     }
-    List<Token> out = new ArrayList<>(n + insertAfter.size());
+    List<Token> out = new ArrayList<>(n + appendSemiAfter.size() + insertCommaBefore.size());
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
+      if (insertCommaBefore.contains(i)) {
+        out.add(new Token(Kind.PUNCT, ",", t.start(), t.start(), 0, false));
+        t = new Token(t.kind(), t.text(), t.start(), t.end(), 1, false);
+      }
       out.add(t);
-      if (insertAfter.contains(i)) {
+      if (appendSemiAfter.contains(i)) {
         out.add(new Token(Kind.PUNCT, ";", t.end(), t.end(), 1, false));
       }
     }
     return out;
+  }
+
+  /// The `;` that terminates an enum's constant list, or -1 if there is none: the first `;` at the
+  /// top level of the enum body (nested brackets — constant bodies, argument lists — are skipped).
+  private static int firstTopLevelSemicolon(List<Token> in, int[] close, int bodyOpen) {
+    int end = close[bodyOpen];
+    for (int i = bodyOpen + 1; i < end; i++) {
+      Token t = in.get(i);
+      if (t.is("{") || t.is("(") || t.is("[")) {
+        if (close[i] < 0) {
+          return -1;
+        }
+        i = close[i];
+        continue;
+      }
+      if (t.is(";")) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /// A name mentioned only in a comment (e.g. a javadoc `{@link Foo}`) still counts as used.
