@@ -1381,6 +1381,7 @@ final class Printer {
   /// Returns whether any break was removed.
   private boolean collapseChainCallArguments() {
     boolean changed = false;
+    boolean[] multiArg = null;
     for (int dot = 0; dot < tokens.size(); dot++) {
       if (!breakBefore[dot] || !isCallDot(dot)) {
         continue; // only a call that chain-breaking put on its own line
@@ -1391,10 +1392,13 @@ final class Printer {
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list
       }
+      if (multiArg == null) {
+        multiArg = computeMultiArgParens();
+      }
       if (
-        hasTopLevelComma(open, close)
+        multiArg[open]
           || nestedInBrokenParen(dot, close)
-          || containsBrokenMultiArgCall(open, close)
+          || containsBrokenMultiArgCall(open, close, multiArg)
       ) {
         continue; // multi-argument call, a call nested in a broken paren, or one wrapping a broken
         // multi-argument call, keeps its break
@@ -1428,25 +1432,28 @@ final class Printer {
     return false;
   }
 
-  /// Whether the paren `(open..close)` separates more than one argument: a comma at the paren's own
-  /// depth (not one nested in an inner bracket or a generic type-argument list).
-  private boolean hasTopLevelComma(int open, int close) {
-    int depth = 0;
+  /// Whether each opener's group separates more than one element: true at an opener holding a
+  /// comma at its own depth (not one nested in an inner bracket or a generic type-argument list).
+  /// One pass over all tokens, attributing each comma to its innermost enclosing opener, replaces
+  /// a rescan of every argument list per collapse candidate.
+  private boolean[] computeMultiArgParens() {
+    boolean[] multiArg = new boolean[tokens.size()];
     int generic = 0;
-    for (int i = open + 1; i < close; i++) {
+    int depth = 0;
+    for (int i = 0; i < tokens.size(); i++) {
       if (marks.isGenericAngle(i)) {
         generic += angleDepthDelta(i);
         continue;
       }
       if (isOpener(i)) {
-        depth++;
-      } else if (isCloser(i)) {
+        openerStack[depth++] = i;
+      } else if (isCloser(i) && depth > 0) {
         depth--;
-      } else if (tokenSym[i] == Sym.COMMA && depth == 0 && generic == 0) {
-        return true;
+      } else if (tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
+        multiArg[openerStack[depth - 1]] = true;
       }
     }
-    return false;
+    return multiArg;
   }
 
   /// Whether the call at `dot` (closing at `close`) sits inside a broken paren group — a `(` whose
@@ -1464,13 +1471,9 @@ final class Printer {
   /// Whether the argument list `(open..close)` wraps a call that is itself broken across lines and
   /// carries more than one argument (`Map.of(\n  "a",\n  "b"\n)`). Collapsing the outer call would
   /// flatten that inner call too, so its break is kept.
-  private boolean containsBrokenMultiArgCall(int open, int close) {
+  private boolean containsBrokenMultiArgCall(int open, int close, boolean[] multiArg) {
     for (int i = open + 1; i < close; i++) {
-      if (
-        tokenSym[i] == Sym.LPAREN
-          && breakBefore[matchClose[i]]
-          && hasTopLevelComma(i, matchClose[i])
-      ) {
+      if (tokenSym[i] == Sym.LPAREN && breakBefore[matchClose[i]] && multiArg[i]) {
         return true;
       }
     }
