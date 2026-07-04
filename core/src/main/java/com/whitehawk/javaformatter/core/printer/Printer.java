@@ -1,5 +1,6 @@
-package com.whitehawk.javaformatter.core;
+package com.whitehawk.javaformatter.core.printer;
 
+import com.whitehawk.javaformatter.core.ArraySmallEnumSet;
 import com.whitehawk.javaformatter.core.JavaLexer.Kind;
 import com.whitehawk.javaformatter.core.JavaLexer.Token;
 
@@ -40,7 +41,7 @@ import java.util.Set;
 /// directly after a `{`/`(` line nor before a `}`/`)` line), and line endings (LF, single final
 /// newline).
 @NullMarked
-final class Printer {
+public final class Printer {
   private static final int INDENT = 2;
   private static final int MAX_WIDTH = 100;
 
@@ -329,7 +330,7 @@ final class Printer {
   private final List<Scope> scopePool = new ArrayList<>();
   private int scopesUsed;
 
-  Printer(List<Token> tokens) {
+  public Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
     int n = this.tokens.size();
     this.marks = new ArraySmallEnumSet<>(Mark.class, n);
@@ -1075,7 +1076,7 @@ final class Printer {
     }
   }
 
-  String print() {
+  public String print() {
     analyze(null);
     // A soft break directly after `=` is never canonical: move it into the right-hand side before
     // wrapping, so the side re-breaks at its own structure.

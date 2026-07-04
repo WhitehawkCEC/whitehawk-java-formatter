@@ -1,6 +1,7 @@
 package com.whitehawk.javaformatter.core;
 
 import com.whitehawk.javaformatter.core.JavaLexer.Token;
+import com.whitehawk.javaformatter.core.printer.Printer;
 
 import org.jspecify.annotations.NullMarked;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -38,7 +39,7 @@ public class FormatterBenchmark {
     Path input = Path.of(
       System.getProperty(
         "formatter.bench.input",
-        "core/src/main/java/com/whitehawk/javaformatter/core/Printer.java"
+        "core/src/main/java/com/whitehawk/javaformatter/core/printer/Printer.java"
       )
     );
     source = Files.readString(input);
