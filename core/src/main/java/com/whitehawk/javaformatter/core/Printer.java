@@ -1022,36 +1022,39 @@ final class Printer {
     }
   }
 
+  /// Re-derives [#lines] from the current breaks. [#lineIndent] is reused when it still fits —
+  /// the next [#analyze] pass reassigns every line's entry — and grows only when the line count
+  /// outgrows it.
+  private void rebuildLines() {
+    lines.clear();
+    buildLines();
+    if (lineIndent.length < lines.size()) {
+      lineIndent = new int[lines.size()];
+    }
+  }
+
   String print() {
     analyze(null);
     // A soft break directly after `=` is never canonical: move it into the right-hand side before
     // wrapping, so the side re-breaks at its own structure.
     if (moveAssignmentBreaks()) {
-      lines.clear();
-      buildLines();
-      lineIndent = new int[lines.size()];
+      rebuildLines();
       analyze(null);
     }
     while (wrapLongLines() | breakGroupElements()) {
-      lines.clear();
-      buildLines();
-      lineIndent = new int[lines.size()];
+      rebuildLines();
       analyze(null);
     }
     // A chain call whose arguments were isolated only because the input crammed the chain onto one
     // line collapses back once the chain is re-broken, reversing forced isolation a join can't.
     if (collapseChainCallArguments()) {
-      lines.clear();
-      buildLines();
-      lineIndent = new int[lines.size()];
+      rebuildLines();
       analyze(null);
     }
     // An isolated control-flow condition paren (`if`/`while`/...) whose whole header fits on one
     // line collapses back, reversing the forced isolation that a soft join cannot cross.
     if (collapseControlFlowHeaders()) {
-      lines.clear();
-      buildLines();
-      lineIndent = new int[lines.size()];
+      rebuildLines();
       analyze(null);
     }
     // A soft-broken continuation that gets joined back (e.g. a single `.call(` unwrapped onto the
