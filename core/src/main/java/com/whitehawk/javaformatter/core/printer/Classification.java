@@ -1,0 +1,100 @@
+package com.whitehawk.javaformatter.core.printer;
+
+import com.whitehawk.javaformatter.core.ArraySmallEnumSet;
+import com.whitehawk.javaformatter.core.JavaLexer.Kind;
+import com.whitehawk.javaformatter.core.JavaLexer.Token;
+
+import org.jspecify.annotations.NullMarked;
+
+import java.util.Set;
+
+/// A class a token's text can belong to, resolved once per token (see [#classify]) so hot paths
+/// avoid repeated set lookups.
+@NullMarked
+enum Classification {
+  KEYWORD,
+  PRIMITIVE,
+  MODIFIER,
+  BINARY_OPERATOR,
+  PAREN_KEYWORD,
+  OPENER,
+  CLOSER;
+
+  private static final Set<String> PAREN_KEYWORDS = Set.of(
+    "if",
+    "for",
+    "while",
+    "switch",
+    "catch",
+    "synchronized",
+    "try",
+    "return",
+    "throw",
+    "assert",
+    "yield"
+  );
+  private static final Set<String> BINARY_OPERATORS = Set.of(
+    "=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&=",
+    "|=",
+    "^=",
+    "<<=",
+    ">>=",
+    ">>>=",
+    "==",
+    "!=",
+    "&&",
+    "||",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "&",
+    "|",
+    "^",
+    "<<",
+    ">>",
+    ">>>",
+    "<",
+    ">",
+    "<=",
+    ">=",
+    "?",
+    ":",
+    "->"
+  );
+
+  /// Records the classes of the token at `i` into `classes`. Every classifying set entry is
+  /// either identifier-shaped or an operator, so only the matching token kind is probed.
+  static void classify(ArraySmallEnumSet<Classification> classes, int i, Token t) {
+    if (t.kind() == Kind.PUNCT) {
+      if (BINARY_OPERATORS.contains(t.text())) {
+        classes.set(i, BINARY_OPERATOR);
+      }
+      switch (t.text()) {
+        case "(", "[", "{" -> classes.set(i, OPENER);
+        case ")", "]", "}" -> classes.set(i, CLOSER);
+        default -> {}
+      }
+    } else if (t.kind() == Kind.IDENT) {
+      if (t.isKeyword()) {
+        classes.set(i, KEYWORD);
+      }
+      if (t.isPrimitive()) {
+        classes.set(i, PRIMITIVE);
+      }
+      if (t.isModifier()) {
+        classes.set(i, MODIFIER);
+      }
+      if (PAREN_KEYWORDS.contains(t.text())) {
+        classes.set(i, PAREN_KEYWORD);
+      }
+    }
+  }
+}
