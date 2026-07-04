@@ -2014,45 +2014,21 @@ final class Printer {
   /// Index of the token closing the plausible type-argument list opened at `open`, or -1 when
   /// the `<` cannot open one.
   private int typeArgumentsEnd(int open) {
-    Token prev = prevCode(open);
-    if (prev == null) {
+    int prevIndex = indexOfPrevCode(open);
+    if (prevIndex < 0) {
       return -1;
     }
-    boolean plausiblePrev = prev.kind() == Kind.IDENT && !prev.isKeyword()
-      || prev.is(".")
-      || prev.is(",")
-      || prev.is("(")
-      || prev.is("<")
-      || prev.is("{")
-      || prev.is("&")
-      || prev.is("|")
-      || prev.is("=")
-      || prev.is("return")
-      || prev.is("new")
-      || prev.is("extends")
-      || prev.is("super")
-      || prev.is("implements")
-      || prev.is("instanceof")
-      || prev.is("case")
-      || prev.is("yield")
-      || prev.is("->")
-      || prev.is("::")
-      || prev.is("?")
-      || prev.is(":")
-      // Type-parameter declarations: `public <T> T foo(..)`, `interface Foo<T>`, `<T> T foo(..)`.
-      || prev.is("public")
-      || prev.is("private")
-      || prev.is("protected")
-      || prev.is("static")
-      || prev.is("final")
-      || prev.is("default")
-      || prev.is("abstract")
-      || prev.is("class")
-      || prev.is("interface")
-      || prev.is("record")
-      || prev.is(";")
-      || prev.is("{")
-      || prev.is("}");
+    boolean plausiblePrev = switch (tokenSym[prevIndex]) {
+      case DOT, COMMA, LPAREN, LT, LBRACE, AMP, BAR, ASSIGN, RETURN, NEW, EXTENDS, SUPER,
+        IMPLEMENTS, INSTANCEOF, CASE, YIELD, ARROW, METHOD_REF, QUESTION, COLON,
+        // Type-parameter declarations: `public <T> T foo(..)`, `interface Foo<T>`, `<T> T foo(..)`.
+        PUBLIC, PRIVATE, PROTECTED, STATIC, FINAL, DEFAULT, ABSTRACT, CLASS, INTERFACE, RECORD,
+        SEMI, RBRACE -> true;
+      default -> {
+        Token prev = tokens.get(prevIndex);
+        yield prev.kind() == Kind.IDENT && !prev.isKeyword();
+      }
+    };
     if (!plausiblePrev) {
       return -1;
     }
@@ -2060,27 +2036,16 @@ final class Printer {
     if (end < 0) {
       return -1;
     }
-    Token follower = nextCode(end);
-    if (follower == null) {
+    int followerIndex = indexOfNextCode(end);
+    if (followerIndex < 0) {
       return end;
     }
-    boolean plausibleFollower = follower.kind() == Kind.IDENT
-      || follower.is("(")
-      || follower.is(")")
-      || follower.is(",")
-      || follower.is(".")
-      || follower.is("::")
-      || follower.is(";")
-      || follower.is("[")
-      || follower.is("{")
-      || follower.is(">")
-      || follower.is(">>")
-      || follower.is(">>>")
-      || follower.is("...")
-      || follower.is("&")
-      || follower.is("->")
-      || follower.is("=")
-      || follower.is("@");
+    boolean plausibleFollower = tokens.get(followerIndex).kind() == Kind.IDENT
+      || switch (tokenSym[followerIndex]) {
+        case LPAREN, RPAREN, COMMA, DOT, METHOD_REF, SEMI, LBRACKET, LBRACE, GT, GT_GT, GT_GT_GT,
+          ELLIPSIS, AMP, ARROW, ASSIGN, AT -> true;
+        default -> false;
+      };
     return plausibleFollower ? end : -1;
   }
 
