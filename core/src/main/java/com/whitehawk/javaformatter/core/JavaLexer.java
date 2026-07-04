@@ -149,6 +149,15 @@ public final class JavaLexer {
     "_"
   );
 
+  /// Shared single-char texts so each ASCII punctuation token does not allocate a new string.
+  private static final String[] ASCII = new String[128];
+
+  static {
+    for (char c = 0; c < 128; c++) {
+      ASCII[c] = String.valueOf(c);
+    }
+  }
+
   private final String src;
   private int pos;
   private int newlines;
@@ -173,7 +182,40 @@ public final class JavaLexer {
     Kind kind = consumeToken();
     newlines = 0;
     atLineStart = false;
-    return new Token(kind, src.substring(start, pos), start, pos, newlinesBefore, column0);
+    String text = kind == Kind.PUNCT ? punctText(start, pos) : src.substring(start, pos);
+    return new Token(kind, text, start, pos, newlinesBefore, column0);
+  }
+
+  /// Shared text of the punctuation token `start..end`, avoiding a string allocation per
+  /// operator: the multi-char cases mirror exactly what [#consumeOperator] can produce.
+  private String punctText(int start, int end) {
+    char c = src.charAt(start);
+    if (end - start == 1) {
+      return c < 128 ? ASCII[c] : src.substring(start, end);
+    }
+    char c1 = src.charAt(start + 1);
+    int len = end - start;
+    return switch (c) {
+      case '=' -> "==";
+      case '!' -> "!=";
+      case '*' -> "*=";
+      case '/' -> "/=";
+      case '%' -> "%=";
+      case '^' -> "^=";
+      case ':' -> "::";
+      case '.' -> "...";
+      case '+' -> c1 == '+' ? "++" : "+=";
+      case '-' -> c1 == '-' ? "--" : c1 == '=' ? "-=" : "->";
+      case '&' -> c1 == '&' ? "&&" : "&=";
+      case '|' -> c1 == '|' ? "||" : "|=";
+      case '<' -> c1 == '=' ? "<=" : len == 2 ? "<<" : "<<=";
+      case '>' -> switch (len) {
+        case 2 -> c1 == '=' ? ">=" : ">>";
+        case 3 -> src.charAt(start + 2) == '=' ? ">>=" : ">>>";
+        default -> ">>>=";
+      };
+      default -> src.substring(start, end);
+    };
   }
 
   private void skipWhitespace() {
