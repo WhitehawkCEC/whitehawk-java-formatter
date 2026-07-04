@@ -1,6 +1,6 @@
 package example;
 
-import com.whitehawk.javaformatter.core.TrackedJavaFiles;
+import unrelated.UnrelatedTrackedJavaFiles;
 import org.jspecify.annotations.NullMarked;
 
 import java.nio.file.Path;
@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 @NullMarked
 public final class TryWithLongStatements {
   private void whatever() {
-    TrackedJavaFiles trackedJavaFiles = Scope.get(TrackedJavaFiles.class);
+    UnrelatedTrackedJavaFiles trackedJavaFiles = Scope.get(UnrelatedTrackedJavaFiles.class);
     try (ExecutorService executor =
            Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
          Stream<Path> files =
