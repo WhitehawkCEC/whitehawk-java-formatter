@@ -39,12 +39,17 @@ public final class Main {
           path = Path.of(arg);
         }
       }
-      try (ExecutorService executor =
-              Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-          Stream<Path> files =
-              changed ? trackedJavaFiles.changed(path) : trackedJavaFiles.list(path)) {
-        List<Future<Void>> results =
-            files.map(file -> executor.submit(() -> format(file))).toList();
+      try (
+        ExecutorService executor = Executors.newFixedThreadPool(
+          Runtime.getRuntime().availableProcessors()
+        );
+        Stream<Path> files = changed
+          ? trackedJavaFiles.changed(path)
+          : trackedJavaFiles.list(path)
+      ) {
+        List<Future<Void>> results = files
+          .map((var file) -> executor.submit(() -> format(file)))
+          .toList();
         for (Future<Void> result : results) {
           result.get();
         }

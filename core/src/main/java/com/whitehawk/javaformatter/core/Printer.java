@@ -43,22 +43,89 @@ final class Printer {
   private static final int MAX_WIDTH = 100;
 
   private static final Set<String> PAREN_KEYWORDS = Set.of(
-    "if", "for", "while", "switch", "catch", "synchronized", "try", "return", "throw", "assert", "yield"
+    "if",
+    "for",
+    "while",
+    "switch",
+    "catch",
+    "synchronized",
+    "try",
+    "return",
+    "throw",
+    "assert",
+    "yield"
   );
   private static final Set<String> PRIMITIVES = Set.of(
-    "boolean", "byte", "char", "short", "int", "long", "float", "double", "void"
+    "boolean",
+    "byte",
+    "char",
+    "short",
+    "int",
+    "long",
+    "float",
+    "double",
+    "void"
   );
   private static final Set<String> MODIFIER_KEYWORDS = Set.of(
-    "public", "private", "protected", "static", "final", "default", "abstract",
-    "synchronized", "native", "strictfp"
+    "public",
+    "private",
+    "protected",
+    "static",
+    "final",
+    "default",
+    "abstract",
+    "synchronized",
+    "native",
+    "strictfp"
   );
   private static final Set<String> BINARY_OPERATORS = Set.of(
-    "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=",
-    "==", "!=", "&&", "||", "+", "-", "*", "/", "%", "&", "|", "^",
-    "<<", ">>", ">>>", "<", ">", "<=", ">=", "?", ":", "->"
+    "=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&=",
+    "|=",
+    "^=",
+    "<<=",
+    ">>=",
+    ">>>=",
+    "==",
+    "!=",
+    "&&",
+    "||",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "&",
+    "|",
+    "^",
+    "<<",
+    ">>",
+    ">>>",
+    "<",
+    ">",
+    "<=",
+    ">=",
+    "?",
+    ":",
+    "->"
   );
   /// Tokens allowed inside a type-argument list, used to disambiguate `<` from less-than.
-  private static final Set<String> TYPE_ARG_PUNCT = Set.of(".", ",", "?", "@", "&", "[", "]", "extends", "super");
+  private static final Set<String> TYPE_ARG_PUNCT = Set.of(
+    ".",
+    ",",
+    "?",
+    "@",
+    "&",
+    "[",
+    "]",
+    "extends",
+    "super"
+  );
   private static final int TYPE_ARG_SCAN_LIMIT = 500;
 
   // Per-token roles resolved by the analysis pass.
@@ -178,7 +245,7 @@ final class Printer {
         semi++;
       }
       if (semi < n) {
-        imports.add(new int[] {i, semi});
+        imports.add(new int[] { i, semi });
       }
       i = semi;
     }
@@ -249,7 +316,7 @@ final class Printer {
   /// (a javadoc `{@link}`/`@see`, or a plain mention) is treated as a use of its import.
   private static void addIdentifierWords(Set<String> used, String text) {
     int len = text.length();
-    for (int i = 0; i < len; ) {
+    for (int i = 0; i < len;) {
       if (Character.isJavaIdentifierStart(text.charAt(i))) {
         int j = i + 1;
         while (j < len && Character.isJavaIdentifierPart(text.charAt(j))) {
@@ -306,12 +373,16 @@ final class Printer {
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
       if (wrap[i]) {
-        out.add(new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0()));
+        out.add(
+          new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+        );
         out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), 0, false));
         out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
         out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
       } else if (prefixVar[i]) {
-        out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), t.newlinesBefore(), t.atColumn0()));
+        out.add(
+          new Token(Kind.IDENT, "var", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+        );
         out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
       } else {
         out.add(t);
@@ -339,9 +410,18 @@ final class Printer {
       if (p.is("case")) {
         return false;
       }
-      boolean labelPart = p.is(".") || p.is(",")
-        || p.is("<") || p.is(">") || p.is(">>") || p.is(">>>") || p.is("?") || p.is("&")
-        || p.is("[") || p.is("]") || p.is("extends") || p.is("super")
+      boolean labelPart = p.is(".")
+        || p.is(",")
+        || p.is("<")
+        || p.is(">")
+        || p.is(">>")
+        || p.is(">>>")
+        || p.is("?")
+        || p.is("&")
+        || p.is("[")
+        || p.is("]")
+        || p.is("extends")
+        || p.is("super")
         || p.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(p.text());
       if (!labelPart) {
         break;
@@ -457,7 +537,7 @@ final class Printer {
       }
       int bodyEnd = statementEnd(in, close, bodyStart);
       if (bodyEnd >= bodyStart) {
-        wraps.add(new int[] {bodyStart, bodyEnd});
+        wraps.add(new int[] { bodyStart, bodyEnd });
       }
     }
     if (wraps.isEmpty()) {
@@ -484,7 +564,14 @@ final class Printer {
           out.add(new Token(Kind.PUNCT, "{", t.start(), t.start(), 0, false));
         }
         // The controlled statement starts its own line so the block spans multiple lines.
-        t = new Token(t.kind(), t.text(), t.start(), t.end(), Math.max(1, t.newlinesBefore()), t.atColumn0());
+        t = new Token(
+          t.kind(),
+          t.text(),
+          t.start(),
+          t.end(),
+          Math.max(1, t.newlinesBefore()),
+          t.atColumn0()
+        );
       }
       out.add(t);
       for (int k = 0; k < closesAt[i]; k++) {
@@ -677,7 +764,7 @@ final class Printer {
     if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
       return false;
     }
-    for (int j = indexOfPrevCode(name); j >= 0; ) {
+    for (int j = indexOfPrevCode(name); j >= 0;) {
       if (tokens.get(j).is("@")) {
         return true;
       }
@@ -769,8 +856,18 @@ final class Printer {
   /// Bounds the element scan of [#forceLogicalBreaks]: any bracket still unskipped (the enclosing
   /// group's edge or an unmatched one) or a separator ending the operand run.
   private static boolean endsOperatorElement(Token t) {
-    return t.is("(") || t.is("[") || t.is("{") || t.is(")") || t.is("]") || t.is("}")
-      || t.is(",") || t.is(";") || t.is("?") || t.is(":") || t.is("->") || t.is("=");
+    return t.is("(")
+      || t.is("[")
+      || t.is("{")
+      || t.is(")")
+      || t.is("]")
+      || t.is("}")
+      || t.is(",")
+      || t.is(";")
+      || t.is("?")
+      || t.is(":")
+      || t.is("->")
+      || t.is("=");
   }
 
   private static boolean isStringLiteral(Token t) {
@@ -778,9 +875,12 @@ final class Printer {
   }
 
   private static boolean endsOperand(Token t) {
-    return t.is(")") || t.is("]")
-      || t.kind() == Kind.STRING || t.kind() == Kind.TEXT_BLOCK
-      || t.kind() == Kind.CHAR || t.kind() == Kind.NUMBER
+    return t.is(")")
+      || t.is("]")
+      || t.kind() == Kind.STRING
+      || t.kind() == Kind.TEXT_BLOCK
+      || t.kind() == Kind.CHAR
+      || t.kind() == Kind.NUMBER
       || t.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(t.text());
   }
 
@@ -992,7 +1092,9 @@ final class Printer {
       } else if (isCloser(t)) {
         depth--;
       } else if (
-        depth == 0 && generic == 0 && (marks[j] & WILDCARD) == 0
+        depth == 0
+          && generic == 0
+          && (marks[j] & WILDCARD) == 0
           && (t.is("?") || t.is(":") && !ops.isEmpty())
       ) {
         ops.add(j);
@@ -1089,9 +1191,11 @@ final class Printer {
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list
       }
-      if (hasTopLevelComma(open, close)
-        || nestedInBrokenParen(dot, close)
-        || containsBrokenMultiArgCall(open, close)) {
+      if (
+        hasTopLevelComma(open, close)
+          || nestedInBrokenParen(dot, close)
+          || containsBrokenMultiArgCall(open, close)
+      ) {
         continue; // multi-argument call, a call nested in a broken paren, or one wrapping a broken
         // multi-argument call, keeps its break
       }
@@ -1167,9 +1271,11 @@ final class Printer {
   /// flatten that inner call too, so its break is kept.
   private boolean containsBrokenMultiArgCall(int open, int close) {
     for (int i = open + 1; i < close; i++) {
-      if (tokens.get(i).is("(")
-        && breakBefore[matchClose[i]]
-        && hasTopLevelComma(i, matchClose[i])) {
+      if (
+        tokens.get(i).is("(")
+          && breakBefore[matchClose[i]]
+          && hasTopLevelComma(i, matchClose[i])
+      ) {
         return true;
       }
     }
@@ -1288,7 +1394,7 @@ final class Printer {
   /// Assigns each line its indent and updates token roles. When `joinWithPrev` is non-null, a line
   /// it flags as joined onto the previous one reuses the join run's head indent, so any bracket
   /// scope opened on that line flows from the joined line rather than a continuation indent.
-  private void analyze(boolean @Nullable [] joinWithPrev) {
+  private void analyze(boolean @Nullable[] joinWithPrev) {
     Deque<Scope> stack = new ArrayDeque<>();
     stack.push(new Scope('B', 0, 0));
     List<Integer> pendingComments = new ArrayList<>();
@@ -1329,7 +1435,9 @@ final class Printer {
       walkLine(stack, line, indent);
     }
     for (int ci : pendingComments) {
-      lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : stack.peek().contentIndent;
+      lineIndent[ci] = tokens.get(
+        lines.get(ci).firstToken()
+      ).atColumn0() ? 0 : stack.peek().contentIndent;
     }
     for (int i = 1; i < tokens.size(); i++) {
       spaceBefore[i] = spaceBetween(i - 1, i);
@@ -1443,7 +1551,11 @@ final class Printer {
         return;
       }
       case "," -> {
-        if (top.generic == 0 && (top.kind == 'P' || top.kind == 'K' || top.kind == 'A' || top.kind == 'E')) {
+        if (
+          top.generic == 0 && (
+            top.kind == 'P' || top.kind == 'K' || top.kind == 'A' || top.kind == 'E'
+          )
+        ) {
           resetElement(top);
         }
         return;
@@ -1507,10 +1619,16 @@ final class Printer {
         }
         boolean word = t.kind() != Kind.PUNCT;
         boolean typeToken = t.kind() == Kind.IDENT
-          && (!JavaLexer.KEYWORDS.contains(t.text())
-            || PRIMITIVES.contains(t.text()) || t.is("extends") || t.is("super"))
-          || t.is(".") || t.is("@")
-          || t.is("&") && top.generic > 0;
+          && (
+            !JavaLexer.KEYWORDS.contains(t.text())
+              || PRIMITIVES.contains(t.text())
+              || t.is("extends")
+              || t.is("super")
+          )
+          || t.is(".")
+          || t.is("@")
+          || t.is("&")
+          && top.generic > 0;
         if (word && top.lastWasWord && top.generic == 0) {
           top.typeLike = false; // two adjacent words at top level cannot be a cast type
         }
@@ -1546,7 +1664,9 @@ final class Printer {
   private Scope openBrace(Deque<Scope> stack, int i, int indent) {
     Scope top = stack.peek();
     Token prev = prevCode(i);
-    if (prev != null && (prev.is("=") || prev.is(",") || prev.is("{") || prev.is("(") || prev.is("]"))) {
+    if (
+      prev != null && (prev.is("=") || prev.is(",") || prev.is("{") || prev.is("(") || prev.is("]"))
+    ) {
       return new Scope('A', indent + INDENT, indent);
     }
     if (top.sawSwitch && prev != null && prev.is(")")) {
@@ -1632,9 +1752,14 @@ final class Printer {
     }
     Token beforeOpen = prevCode(matchOpen[closeIndex]);
     // A cast's `(` cannot follow a name or a closing bracket (that would be a call or index).
-    if (beforeOpen != null
-      && (beforeOpen.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(beforeOpen.text())
-        || beforeOpen.is(")") || beforeOpen.is("]"))) {
+    if (
+      beforeOpen != null
+        && (
+          beforeOpen.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(beforeOpen.text())
+            || beforeOpen.is(")")
+            || beforeOpen.is("]")
+        )
+    ) {
       return false;
     }
     Token next = nextCode(closeIndex);
@@ -1645,7 +1770,9 @@ final class Printer {
       case "+", "-", "++", "--" -> paren.sawPrimitive;
       case "(", "!", "~", "this", "super", "new" -> true;
       default -> next.kind() != Kind.PUNCT && !JavaLexer.KEYWORDS.contains(next.text())
-        || next.kind() == Kind.NUMBER || next.kind() == Kind.STRING || next.kind() == Kind.CHAR
+        || next.kind() == Kind.NUMBER
+        || next.kind() == Kind.STRING
+        || next.kind() == Kind.CHAR
         || next.kind() == Kind.TEXT_BLOCK;
     };
   }
@@ -1655,13 +1782,21 @@ final class Printer {
     if (prev == null) {
       return true;
     }
-    if (prev.kind() == Kind.NUMBER || prev.kind() == Kind.STRING || prev.kind() == Kind.CHAR
-      || prev.kind() == Kind.TEXT_BLOCK) {
+    if (
+      prev.kind() == Kind.NUMBER
+        || prev.kind() == Kind.STRING
+        || prev.kind() == Kind.CHAR
+        || prev.kind() == Kind.TEXT_BLOCK
+    ) {
       return false;
     }
     if (prev.kind() == Kind.IDENT) {
-      return JavaLexer.KEYWORDS.contains(prev.text()) && !prev.is("this") && !prev.is("super")
-        && !prev.is("true") && !prev.is("false") && !prev.is("null");
+      return JavaLexer.KEYWORDS.contains(prev.text())
+        && !prev.is("this")
+        && !prev.is("super")
+        && !prev.is("true")
+        && !prev.is("false")
+        && !prev.is("null");
     }
     if (prev.is(")")) {
       return (marks[indexOfPrevCode(i)] & CAST_CLOSE) != 0;
@@ -1679,15 +1814,40 @@ final class Printer {
       return -1;
     }
     boolean plausiblePrev = prev.kind() == Kind.IDENT && !JavaLexer.KEYWORDS.contains(prev.text())
-      || prev.is(".") || prev.is(",") || prev.is("(") || prev.is("<") || prev.is("{")
-      || prev.is("&") || prev.is("|") || prev.is("=") || prev.is("return") || prev.is("new")
-      || prev.is("extends") || prev.is("super") || prev.is("implements") || prev.is("instanceof")
-      || prev.is("case") || prev.is("yield") || prev.is("->") || prev.is("::") || prev.is("?") || prev.is(":")
+      || prev.is(".")
+      || prev.is(",")
+      || prev.is("(")
+      || prev.is("<")
+      || prev.is("{")
+      || prev.is("&")
+      || prev.is("|")
+      || prev.is("=")
+      || prev.is("return")
+      || prev.is("new")
+      || prev.is("extends")
+      || prev.is("super")
+      || prev.is("implements")
+      || prev.is("instanceof")
+      || prev.is("case")
+      || prev.is("yield")
+      || prev.is("->")
+      || prev.is("::")
+      || prev.is("?")
+      || prev.is(":")
       // Type-parameter declarations: `public <T> T foo(..)`, `interface Foo<T>`, `<T> T foo(..)`.
-      || prev.is("public") || prev.is("private") || prev.is("protected") || prev.is("static")
-      || prev.is("final") || prev.is("default") || prev.is("abstract") || prev.is("class")
-      || prev.is("interface") || prev.is("record")
-      || prev.is(";") || prev.is("{") || prev.is("}");
+      || prev.is("public")
+      || prev.is("private")
+      || prev.is("protected")
+      || prev.is("static")
+      || prev.is("final")
+      || prev.is("default")
+      || prev.is("abstract")
+      || prev.is("class")
+      || prev.is("interface")
+      || prev.is("record")
+      || prev.is(";")
+      || prev.is("{")
+      || prev.is("}");
     if (!plausiblePrev) {
       return -1;
     }
@@ -1700,10 +1860,22 @@ final class Printer {
       return end;
     }
     boolean plausibleFollower = follower.kind() == Kind.IDENT
-      || follower.is("(") || follower.is(")") || follower.is(",") || follower.is(".")
-      || follower.is("::") || follower.is(";") || follower.is("[") || follower.is("{")
-      || follower.is(">") || follower.is(">>") || follower.is(">>>") || follower.is("...")
-      || follower.is("&") || follower.is("->") || follower.is("=") || follower.is("@");
+      || follower.is("(")
+      || follower.is(")")
+      || follower.is(",")
+      || follower.is(".")
+      || follower.is("::")
+      || follower.is(";")
+      || follower.is("[")
+      || follower.is("{")
+      || follower.is(">")
+      || follower.is(">>")
+      || follower.is(">>>")
+      || follower.is("...")
+      || follower.is("&")
+      || follower.is("->")
+      || follower.is("=")
+      || follower.is("@");
     return plausibleFollower ? end : -1;
   }
 
@@ -1724,8 +1896,11 @@ final class Printer {
           return depth == 0 ? i : -1;
         }
       } else if (t.kind() == Kind.IDENT) {
-        if (JavaLexer.KEYWORDS.contains(t.text()) && !TYPE_ARG_PUNCT.contains(t.text())
-          && !PRIMITIVES.contains(t.text())) {
+        if (
+          JavaLexer.KEYWORDS.contains(t.text())
+            && !TYPE_ARG_PUNCT.contains(t.text())
+            && !PRIMITIVES.contains(t.text())
+        ) {
           return -1;
         }
       } else if (t.kind() != Kind.PUNCT || !TYPE_ARG_PUNCT.contains(t.text())) {
@@ -1789,7 +1964,7 @@ final class Printer {
   /// case or label colon, an annotation line, or a trailing line comment.
   private boolean[] computeJoins() {
     boolean[] joinWithPrev = new boolean[lines.size()];
-    for (int li = 0; li < lines.size(); ) {
+    for (int li = 0; li < lines.size();) {
       int end = li;
       while (end + 1 < lines.size() && joinable(end + 1)) {
         end++;
@@ -1850,7 +2025,13 @@ final class Printer {
     }
     int prevLastIndex = prev.firstToken() + prev.tokenCount() - 1;
     Token prevLast = tokens.get(prevLastIndex);
-    if (prevLast.isComment() || prevLast.is(";") || prevLast.is("{") || prevLast.is("}") || prevLast.is(",")) {
+    if (
+      prevLast.isComment() || prevLast.is(";") || prevLast.is("{") || prevLast.is(
+        "}"
+      ) || prevLast.is(
+        ","
+      )
+    ) {
       return false;
     }
     // `.call()` on an invocation result (`foo(..)` or `arr[..]`) is a chain wrap point and stays
@@ -1953,7 +2134,7 @@ final class Printer {
       String text = t.text();
       int nl = text.indexOf('\n');
       out.append(text.substring(0, nl).stripTrailing());
-      for (int from = nl + 1; from >= 0; ) {
+      for (int from = nl + 1; from >= 0;) {
         int next = text.indexOf('\n', from);
         String raw = next < 0 ? text.substring(from) : text.substring(from, next);
         if (raw.endsWith("\r")) {
@@ -2044,9 +2225,11 @@ final class Printer {
     }
     if (next.is("(")) {
       return prev.kind() == Kind.IDENT && PAREN_KEYWORDS.contains(prev.text())
-        || prev.is("do") || prev.is("else")
+        || prev.is("do")
+        || prev.is("else")
         || BINARY_OPERATORS.contains(prev.text()) && (marks[prevIndex] & GENERIC_ANGLE) == 0
-        || prev.is(";") || prev.is(",");
+        || prev.is(";")
+        || prev.is(",");
     }
     if (next.is("[")) {
       return false;
@@ -2076,8 +2259,15 @@ final class Printer {
 
   private boolean spaceBeforePrefix(int prevIndex) {
     Token prev = tokens.get(prevIndex);
-    if (prev.is("(") || prev.is("[") || prev.is("!") || prev.is("~") || prev.is("@")
-      || prev.is(".") || prev.is("::")) {
+    if (
+      prev.is("(")
+        || prev.is("[")
+        || prev.is("!")
+        || prev.is("~")
+        || prev.is("@")
+        || prev.is(".")
+        || prev.is("::")
+    ) {
       return false;
     }
     if ((marks[prevIndex] & UNARY) != 0) {

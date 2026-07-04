@@ -54,12 +54,17 @@ public final class FormatMojo extends AbstractMojo {
     try (BeanScope scope = BeanScope.builder().classLoader(getClass().getClassLoader()).build()) {
       Formatter formatter = scope.get(Formatter.class);
       TrackedJavaFiles trackedJavaFiles = scope.get(TrackedJavaFiles.class);
-      try (ExecutorService executor =
-              Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-          Stream<Path> files =
-              changed ? trackedJavaFiles.changed(path) : trackedJavaFiles.list(path)) {
-        List<Future<Void>> results =
-            files.map(file -> executor.submit(() -> format(formatter, file))).toList();
+      try (
+        ExecutorService executor = Executors.newFixedThreadPool(
+          Runtime.getRuntime().availableProcessors()
+        );
+        Stream<Path> files = changed
+          ? trackedJavaFiles.changed(path)
+          : trackedJavaFiles.list(path)
+      ) {
+        List<Future<Void>> results = files
+          .map((var file) -> executor.submit(() -> format(formatter, file)))
+          .toList();
         for (Future<Void> result : results) {
           result.get();
         }

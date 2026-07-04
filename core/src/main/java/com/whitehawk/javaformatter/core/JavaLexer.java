@@ -27,7 +27,14 @@ public final class JavaLexer {
   /// @param end            offset just past the last character
   /// @param newlinesBefore line terminators between the previous token and this one
   /// @param atColumn0      token starts at the very beginning of its line
-  public record Token(Kind kind, String text, int start, int end, int newlinesBefore, boolean atColumn0) {
+  public record Token(
+    Kind kind,
+    String text,
+    int start,
+    int end,
+    int newlinesBefore,
+    boolean atColumn0
+  ) {
     public boolean is(String s) {
       return text.equals(s);
     }
@@ -40,14 +47,66 @@ public final class JavaLexer {
   /// Reserved words plus literals and contextual keywords that formatting logic (or renaming
   /// tools) must never treat as plain identifiers.
   public static final Set<String> KEYWORDS = Set.of(
-    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-    "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
-    "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long",
-    "native", "new", "package", "private", "protected", "public", "return", "short", "static",
-    "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try",
-    "void", "volatile", "while",
-    "true", "false", "null",
-    "var", "yield", "record", "sealed", "permits", "when", "_"
+    "abstract",
+    "assert",
+    "boolean",
+    "break",
+    "byte",
+    "case",
+    "catch",
+    "char",
+    "class",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extends",
+    "final",
+    "finally",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "implements",
+    "import",
+    "instanceof",
+    "int",
+    "interface",
+    "long",
+    "native",
+    "new",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "short",
+    "static",
+    "strictfp",
+    "super",
+    "switch",
+    "synchronized",
+    "this",
+    "throw",
+    "throws",
+    "transient",
+    "try",
+    "void",
+    "volatile",
+    "while",
+    "true",
+    "false",
+    "null",
+    "var",
+    "yield",
+    "record",
+    "sealed",
+    "permits",
+    "when",
+    "_"
   );
 
   private final String src;
@@ -108,7 +167,11 @@ public final class JavaLexer {
       }
       return Kind.IDENT;
     }
-    if (Character.isDigit(c) || (c == '.' && pos + 1 < src.length() && Character.isDigit(src.charAt(pos + 1)))) {
+    if (
+      Character.isDigit(c) || (
+        c == '.' && pos + 1 < src.length() && Character.isDigit(src.charAt(pos + 1))
+      )
+    ) {
       consumeNumber();
       return Kind.NUMBER;
     }
@@ -212,8 +275,10 @@ public final class JavaLexer {
   }
 
   private void consumeNumber() {
-    boolean hexOrBinary = src.startsWith("0x", pos) || src.startsWith("0X", pos)
-      || src.startsWith("0b", pos) || src.startsWith("0B", pos);
+    boolean hexOrBinary = src.startsWith("0x", pos)
+      || src.startsWith("0X", pos)
+      || src.startsWith("0b", pos)
+      || src.startsWith("0B", pos);
     if (hexOrBinary) {
       pos += 2;
     }

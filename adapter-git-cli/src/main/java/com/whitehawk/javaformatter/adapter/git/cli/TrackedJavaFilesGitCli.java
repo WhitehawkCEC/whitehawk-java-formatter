@@ -39,13 +39,23 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
       return Stream.empty();
     }
 
-    Process process = start(path, false, "ls-tree", "-r", "-z", "--full-tree", "--name-only", "HEAD");
+    Process process = start(
+      path,
+      false,
+      "ls-tree",
+      "-r",
+      "-z",
+      "--full-tree",
+      "--name-only",
+      "HEAD"
+    );
     InputStream stdout = new BufferedInputStream(process.getInputStream());
     NulRecordSpliterator records = new NulRecordSpliterator(stdout);
-    return StreamSupport.stream(records, false)
-        .filter(name -> name.endsWith(".java"))
-        .map(workTree::resolve)
-        .onClose(() -> finish(process, records, stdout));
+    return StreamSupport
+      .stream(records, false)
+      .filter((var name) -> name.endsWith(".java"))
+      .map(workTree::resolve)
+      .onClose(() -> finish(process, records, stdout));
   }
 
   @Override
@@ -56,16 +66,16 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
     // Run from the work-tree root so names are repo-root-relative and resolve against it.
     // -m: tracked files modified in the work tree; -o: untracked files;
     // --exclude-standard: drop anything git ignores.
-    Process process =
-        start(workTree, false, "ls-files", "-z", "-m", "-o", "--exclude-standard");
+    Process process = start(workTree, false, "ls-files", "-z", "-m", "-o", "--exclude-standard");
     InputStream stdout = new BufferedInputStream(process.getInputStream());
     NulRecordSpliterator records = new NulRecordSpliterator(stdout);
-    return StreamSupport.stream(records, false)
-        .filter(name -> name.endsWith(".java"))
-        .map(workTree::resolve)
-        // `ls-files -m` also reports deletions; skip anything no longer on disk.
-        .filter(Files::exists)
-        .onClose(() -> finish(process, records, stdout));
+    return StreamSupport
+      .stream(records, false)
+      .filter((var name) -> name.endsWith(".java"))
+      .map(workTree::resolve)
+      // `ls-files -m` also reports deletions; skip anything no longer on disk.
+      .filter(Files::exists)
+      .onClose(() -> finish(process, records, stdout));
   }
 
   /// Runs `git` to completion and returns its trimmed stdout, throwing on a non-zero exit.
@@ -76,8 +86,11 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
       int exit = process.waitFor();
       if (exit != 0) {
         throw new UncheckedIOException(
-            new IOException("git " + String.join(" ", args) + " failed (exit " + exit + "): "
-                + output.strip()));
+          new IOException(
+            "git " + String.join(" ", args) + " failed (exit " + exit + "): "
+              + output.strip()
+          )
+        );
       }
       return output.strip();
     } catch (IOException e) {
@@ -138,7 +151,8 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
         int exit = process.waitFor();
         if (closeError == null && exit != 0) {
           throw new UncheckedIOException(
-              new IOException("git ls-tree failed with exit code " + exit));
+            new IOException("git ls-tree failed with exit code " + exit)
+          );
         }
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
