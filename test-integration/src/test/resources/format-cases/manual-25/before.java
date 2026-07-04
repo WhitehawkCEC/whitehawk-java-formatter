@@ -1,18 +1,18 @@
 package example;
 
-import com.whitehawk.javaformatter.core.JavaLexer;
+import unrelated.UnrelatedJavaLexer;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public final class MultipleConditions {
   private boolean isUnaryPosition(int i) {
-    JavaLexer.Token prev = prevCode(i);
+    UnrelatedJavaLexer.Token prev = prevCode(i);
     if (prev == null) {
       return true;
     }
     if (
-      prev.kind() == JavaLexer.Kind.NUMBER || prev.kind() == JavaLexer.Kind.STRING || prev.kind() == JavaLexer.Kind.CHAR
-        || prev.kind() == JavaLexer.Kind.TEXT_BLOCK
+      prev.kind() == UnrelatedJavaLexer.Kind.NUMBER || prev.kind() == UnrelatedJavaLexer.Kind.STRING || prev.kind() == UnrelatedJavaLexer.Kind.CHAR
+        || prev.kind() == UnrelatedJavaLexer.Kind.TEXT_BLOCK
     ) {
       return false;
     }
