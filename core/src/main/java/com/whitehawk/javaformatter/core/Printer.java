@@ -295,6 +295,12 @@ final class Printer {
   /// Opener-stack scratch for [#breakGroupElements], allocated once: the pass re-runs every
   /// iteration of the wrap loop.
   private final int[] openerStack;
+  /// Prefix sums making any token range's width check O(1): `prefixWidth[i]` is the one-line
+  /// width of tokens `0..i-1`, each preceded by its separating space and a multiline token
+  /// counting as zero width (see [#runWidth]). Rebuilt whenever [#spaceBefore] is.
+  private final int[] prefixWidth;
+  /// Multiline tokens (text block, block comment) before each index; never changes.
+  private final int[] prefixMultiline;
 
   Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
@@ -312,10 +318,13 @@ final class Printer {
     this.tokenClasses = tokenClasses;
     this.spaceBefore = new boolean[n];
     this.openerStack = new int[n];
+    this.prefixWidth = new int[n + 1];
+    this.prefixMultiline = new int[n + 1];
     for (int i = 0; i < n; i++) {
       Token t = this.tokens.get(i);
       String text = t.text();
       tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
+      prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
       tokenClasses[i] = Classification.of(t);
     }
     computeBracketMatches();
@@ -1262,13 +1271,12 @@ final class Printer {
     if (hasMultilineToken(li - 1, li)) {
       return false;
     }
-    int joined = lineWidth(li - 1) + (spaceBefore[i] ? 1 : 0) + lineWidth(li) - lineIndent[li];
-    if (joined <= MAX_WIDTH) {
-      return true;
-    }
     int start = lines.get(li - 1).firstToken();
     Line line = lines.get(li);
     int end = line.firstToken() + line.tokenCount();
+    if (lineIndent[li - 1] + runWidth(start, end) <= MAX_WIDTH) {
+      return true;
+    }
     int open = -1;
     for (int j = start; j < end; j++) {
       if (!isOpener(j)) {
@@ -1286,14 +1294,7 @@ final class Printer {
     if (open < 0) {
       return false;
     }
-    int width = lineIndent[li - 1];
-    for (int j = start; j <= open; j++) {
-      if (j > start && spaceBefore[j]) {
-        width++;
-      }
-      width += tokenWidth[j];
-    }
-    return width <= MAX_WIDTH;
+    return lineIndent[li - 1] + runWidth(start, open + 1) <= MAX_WIDTH;
   }
 
   /// Collapses the argument paren of a broken method chain's call when the whole call — from its
@@ -1326,20 +1327,10 @@ final class Printer {
         // multi-argument call, keeps its break
       }
       int li = lineIndexOf(dot);
-      int width = lineIndent[li];
-      boolean blocked = false;
-      for (int i = dot; i <= close; i++) {
-        Token t = tokens.get(i);
-        if (tokenWidth[i] < 0 || i > open && i < close && t.is("{")) {
-          blocked = true; // multiline token, or a brace group that keeps its own lines
-          break;
-        }
-        if (i > dot && spaceBefore[i]) {
-          width++;
-        }
-        width += tokenWidth[i];
-      }
-      if (blocked || width > MAX_WIDTH) {
+      // Blocked by a multiline token, or a brace group that keeps its own lines.
+      boolean blocked = prefixMultiline[close + 1] > prefixMultiline[dot]
+        || hasBraceInside(open, close);
+      if (blocked || lineIndent[li] + runWidth(dot, close + 1) > MAX_WIDTH) {
         continue;
       }
       for (int i = open + 1; i <= close; i++) {
@@ -1351,6 +1342,17 @@ final class Printer {
       }
     }
     return changed;
+  }
+
+  /// Whether a `{` sits strictly inside `open..close` — a block, lambda body, or array
+  /// initializer whose group keeps its own lines.
+  private boolean hasBraceInside(int open, int close) {
+    for (int i = open + 1; i < close; i++) {
+      if (tokens.get(i).is("{")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Whether the paren `(open..close)` separates more than one argument: a comma at the paren's own
@@ -1430,19 +1432,8 @@ final class Printer {
       }
       int li = lineIndexOf(open);
       int start = lines.get(li).firstToken();
-      int width = lineIndent[li];
-      boolean multiline = false;
-      for (int i = start; i <= brace; i++) {
-        if (tokenWidth[i] < 0) {
-          multiline = true;
-          break;
-        }
-        if (i > start && spaceBefore[i]) {
-          width++;
-        }
-        width += tokenWidth[i];
-      }
-      if (multiline || width > MAX_WIDTH) {
+      boolean multiline = prefixMultiline[brace + 1] > prefixMultiline[start];
+      if (multiline || lineIndent[li] + runWidth(start, brace + 1) > MAX_WIDTH) {
         continue;
       }
       for (int i = open + 1; i <= close; i++) {
@@ -1490,21 +1481,22 @@ final class Printer {
     return -1;
   }
 
+  /// One-line width of tokens `first..endExclusive-1`, excluding any space before `first`. A
+  /// multiline token counts as zero width: callers rule those out via [#hasMultilineToken] or
+  /// [#prefixMultiline] first.
+  private int runWidth(int first, int endExclusive) {
+    return prefixWidth[endExclusive] - prefixWidth[first] - (spaceBefore[first] ? 1 : 0);
+  }
+
   /// Output width of line `li`, or 0 when it contains a multiline token (text block, block
   /// comment) and cannot be usefully measured or wrapped.
   private int lineWidth(int li) {
     Line line = lines.get(li);
-    int width = lineIndent[li];
-    for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-      if (tokenWidth[i] < 0) {
-        return 0;
-      }
-      if (i > line.firstToken() && spaceBefore[i]) {
-        width++;
-      }
-      width += tokenWidth[i];
+    int end = line.firstToken() + line.tokenCount();
+    if (prefixMultiline[end] > prefixMultiline[line.firstToken()]) {
+      return 0;
     }
-    return width;
+    return lineIndent[li] + runWidth(line.firstToken(), end);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1562,6 +1554,9 @@ final class Printer {
     if (marks.consumeChanged()) {
       for (int i = 1; i < tokens.size(); i++) {
         spaceBefore[i] = spaceBetween(i - 1, i);
+      }
+      for (int i = 0; i < tokens.size(); i++) {
+        prefixWidth[i + 1] = prefixWidth[i] + (spaceBefore[i] ? 1 : 0) + Math.max(tokenWidth[i], 0);
       }
     }
   }
@@ -2178,29 +2173,16 @@ final class Printer {
   private boolean hasMultilineToken(int startLine, int endLine) {
     int first = lines.get(startLine).firstToken();
     Line last = lines.get(endLine);
-    int end = last.firstToken() + last.tokenCount();
-    for (int i = first; i < end; i++) {
-      if (tokenWidth[i] < 0) {
-        return true;
-      }
-    }
-    return false;
+    return prefixMultiline[last.firstToken() + last.tokenCount()] > prefixMultiline[first];
   }
 
   private boolean fitsJoined(int startLine, int endLine) {
+    if (hasMultilineToken(startLine, endLine)) {
+      return false; // text block or multiline comment
+    }
     int first = lines.get(startLine).firstToken();
     Line last = lines.get(endLine);
-    int end = last.firstToken() + last.tokenCount();
-    int width = lineIndent[startLine];
-    for (int i = first; i < end; i++) {
-      if (tokenWidth[i] < 0) {
-        return false; // text block or multiline comment
-      }
-      if (i > first && spaceBefore[i]) {
-        width++;
-      }
-      width += tokenWidth[i];
-    }
+    int width = lineIndent[startLine] + runWidth(first, last.firstToken() + last.tokenCount());
     return width <= MAX_WIDTH;
   }
 
