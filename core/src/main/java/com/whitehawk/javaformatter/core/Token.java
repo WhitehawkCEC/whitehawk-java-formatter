@@ -38,6 +38,71 @@ public record Token(
     "strictfp"
   );
 
+  /// Reserved words plus literals and contextual keywords that formatting logic (or renaming
+  /// tools) must never treat as plain identifiers.
+  private static final Set<String> KEYWORDS = Set.of(
+    "abstract",
+    "assert",
+    "boolean",
+    "break",
+    "byte",
+    "case",
+    "catch",
+    "char",
+    "class",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extends",
+    "final",
+    "finally",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "implements",
+    "import",
+    "instanceof",
+    "int",
+    "interface",
+    "long",
+    "native",
+    "new",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "short",
+    "static",
+    "strictfp",
+    "super",
+    "switch",
+    "synchronized",
+    "this",
+    "throw",
+    "throws",
+    "transient",
+    "try",
+    "void",
+    "volatile",
+    "while",
+    "true",
+    "false",
+    "null",
+    "var",
+    "yield",
+    "record",
+    "sealed",
+    "permits",
+    "when",
+    "_"
+  );
+
   public boolean is(String s) {
     return text.equals(s);
   }
@@ -49,7 +114,7 @@ public record Token(
   /// The text is one of [#KEYWORDS]. Keyword texts are identifier-shaped, so no other token
   /// kind's text can match.
   public boolean isKeyword() {
-    return JavaLexer.KEYWORDS.contains(text);
+    return KEYWORDS.contains(text);
   }
 
   /// The text is a primitive type keyword, including `void`.
