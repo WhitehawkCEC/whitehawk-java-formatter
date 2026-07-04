@@ -1696,7 +1696,9 @@ final class Printer {
   }
 
   private String emit(boolean[] joinWithPrev) {
-    StringBuilder out = new StringBuilder();
+    // The last token's end offset approximates the source length, and the output stays close.
+    int capacity = tokens.isEmpty() ? 1 : tokens.get(tokens.size() - 1).end() + 1;
+    StringBuilder out = new StringBuilder(capacity);
     for (int li = 0; li < lines.size(); li++) {
       Line line = lines.get(li);
       boolean joined = li > 0 && joinWithPrev[li];
