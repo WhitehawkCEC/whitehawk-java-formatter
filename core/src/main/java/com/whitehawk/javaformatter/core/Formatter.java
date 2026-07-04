@@ -1,6 +1,5 @@
 package com.whitehawk.javaformatter.core;
 
-import com.whitehawk.javaformatter.core.JavaLexer.Token;
 import com.whitehawk.javaformatter.core.printer.Printer;
 
 import jakarta.inject.Singleton;
