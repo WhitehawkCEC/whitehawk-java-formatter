@@ -57,6 +57,9 @@ public final class Printer {
   /// Recycled across [#analyze] passes instead of reallocated per bracket per pass.
   private final List<Scope> scopePool = new ArrayList<>();
   private int scopesUsed;
+  /// Reused across [#analyze] passes instead of reallocated each pass.
+  private final Deque<Scope> analyzeStack = new ArrayDeque<>();
+  private final List<Integer> pendingComments = new ArrayList<>();
 
   public Printer(List<Token> tokens) {
     this.tokens = TokenPreprocessor.preprocess(tokens);
@@ -793,9 +796,10 @@ public final class Printer {
   /// it flows from the joined line rather than a discarded continuation indent.
   private void analyze(boolean @Nullable[] joinWithPrev) {
     scopesUsed = 0;
-    Deque<Scope> stack = new ArrayDeque<>();
+    Deque<Scope> stack = analyzeStack;
+    stack.clear();
     stack.push(newScope(Scope.Kind.BLOCK, 0, 0));
-    List<Integer> pendingComments = new ArrayList<>();
+    pendingComments.clear();
     int prevIndent = 0;
     int headIndent = 0;
 
