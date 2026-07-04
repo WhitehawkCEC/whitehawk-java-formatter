@@ -282,43 +282,15 @@ final class Printer {
     COLON_NO_SPACE_BEFORE,
     /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
     ANGLE_SCANNED;
-
-    final byte bit = (byte) (1 << ordinal());
-  }
-
-  /// Per-token [Mark]s, one bit per role. Tracks whether any bit was added so a caller can skip
-  /// recomputing state derived from the roles.
-  private static final class Marks {
-    private final byte[] bits;
-    /// Starts true so the first [#consumeChanged] caller computes its derived state.
-    private boolean changed = true;
-
-    Marks(int size) {
-      this.bits = new byte[size];
-    }
-
-    /// Whether a bit was added since the previous call.
-    boolean consumeChanged() {
-      boolean was = changed;
-      changed = false;
-      return was;
-    }
-
-    void set(int i, Mark mark) {
-      if ((bits[i] & mark.bit) == 0) {
-        bits[i] |= mark.bit;
-        changed = true;
-      }
-    }
-
-    boolean has(int i, Mark mark) {
-      return (bits[i] & mark.bit) != 0;
-    }
   }
 
   private final List<Token> tokens;
   private final List<Line> lines = new ArrayList<>();
-  private final Marks marks;
+  /// Per-token [Mark]s, one bit per role.
+  private final ArraySmallEnumSet<Mark> marks;
+  /// Whether a [Mark] was added since [#consumeMarksChanged], so a caller can skip recomputing
+  /// state derived from the roles. Starts true so the first caller computes its derived state.
+  private boolean marksChanged = true;
   private int[] lineIndent;
   /// True where a line break must precede the token; seeded from input newlines, then normalized.
   private final boolean[] breakBefore;
@@ -360,7 +332,7 @@ final class Printer {
   Printer(List<Token> tokens) {
     this.tokens = insertMissingBraces(expandLambdaParams(removeUnusedImports(tokens)));
     int n = this.tokens.size();
-    this.marks = new Marks(n);
+    this.marks = new ArraySmallEnumSet<>(Mark.class, n);
     this.breakBefore = new boolean[n];
     this.forcedBreak = new boolean[n];
     this.tokenLine = new int[n];
@@ -390,6 +362,18 @@ final class Printer {
 
   private boolean hasClass(int i, Classification cls) {
     return tokenClasses.has(i, cls);
+  }
+
+  /// Adds `mark` to the token at `i`, tracking whether any bit was newly added.
+  private void mark(int i, Mark mark) {
+    marksChanged |= marks.set(i, mark);
+  }
+
+  /// Whether a [Mark] was added since the previous call.
+  private boolean consumeMarksChanged() {
+    boolean was = marksChanged;
+    marksChanged = false;
+    return was;
   }
 
   /// The token at `i` is `(`, `[`, or `{`.
@@ -1614,7 +1598,7 @@ final class Printer {
         lines.get(ci).firstToken()
       ).atColumn0() ? 0 : stack.peek().contentIndent;
     }
-    if (marks.consumeChanged()) {
+    if (consumeMarksChanged()) {
       for (int i = 1; i < tokens.size(); i++) {
         spaceBefore[i] = spaceBetween(i - 1, i);
       }
@@ -1703,7 +1687,7 @@ final class Printer {
           stack.pop();
         }
         if (sym == Sym.RPAREN && isCast(closed, i)) {
-          marks.set(i, Mark.CAST_CLOSE);
+          mark(i, Mark.CAST_CLOSE);
         }
         afterContentToken(stack.peek(), sym == Sym.RBRACKET); // `]` can end an array type in a cast
       }
@@ -1730,7 +1714,7 @@ final class Printer {
       }
       case LT -> {
         if (!marks.has(i, Mark.GENERIC_ANGLE) && !marks.has(i, Mark.ANGLE_SCANNED)) {
-          marks.set(i, Mark.ANGLE_SCANNED);
+          mark(i, Mark.ANGLE_SCANNED);
           int end = typeArgumentsEnd(i);
           if (end >= 0) {
             markTypeArguments(i, end);
@@ -1751,7 +1735,7 @@ final class Printer {
       }
       case QUESTION -> {
         if (top.generic > 0) {
-          marks.set(i, Mark.WILDCARD);
+          mark(i, Mark.WILDCARD);
         } else {
           if (top.ternaryIndents == null) {
             top.ternaryIndents = new ArrayDeque<>();
@@ -1763,7 +1747,7 @@ final class Printer {
       case COLON -> analyzeColon(stack, i, top);
       case PLUS, MINUS, INCREMENT, DECREMENT, BANG, TILDE -> {
         if (isUnaryPosition(i)) {
-          marks.set(i, Mark.UNARY);
+          mark(i, Mark.UNARY);
         }
         afterContentToken(top, false);
       }
@@ -1858,7 +1842,7 @@ final class Printer {
       return;
     }
     if (top.kind == 'S' && top.caseLabel) {
-      marks.set(i, Mark.COLON_NO_SPACE_BEFORE);
+      mark(i, Mark.COLON_NO_SPACE_BEFORE);
       closeElement(top);
       return;
     }
@@ -1866,7 +1850,7 @@ final class Printer {
       afterContentToken(top, false);
       return;
     }
-    marks.set(i, Mark.COLON_NO_SPACE_BEFORE); // labeled statement
+    mark(i, Mark.COLON_NO_SPACE_BEFORE); // labeled statement
     closeElement(top);
   }
 
@@ -2047,11 +2031,11 @@ final class Printer {
   }
 
   private void markTypeArguments(int open, int end) {
-    marks.set(open, Mark.GENERIC_ANGLE);
+    mark(open, Mark.GENERIC_ANGLE);
     for (int i = open + 1; i <= end; i++) {
       switch (tokenSym[i]) {
-        case LT, GT, GT_GT, GT_GT_GT -> marks.set(i, Mark.GENERIC_ANGLE);
-        case QUESTION -> marks.set(i, Mark.WILDCARD);
+        case LT, GT, GT_GT, GT_GT_GT -> mark(i, Mark.GENERIC_ANGLE);
+        case QUESTION -> mark(i, Mark.WILDCARD);
         default -> {}
       }
     }
