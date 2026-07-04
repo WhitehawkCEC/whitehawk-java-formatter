@@ -11,5 +11,6 @@ enum Mark {
   CAST_CLOSE,
   COLON_NO_SPACE_BEFORE,
   /// Type-argument disambiguation already ran at this `<`; a failed scan is never retried.
-  ANGLE_SCANNED;
+  ANGLE_SCANNED,
+  ;
 }

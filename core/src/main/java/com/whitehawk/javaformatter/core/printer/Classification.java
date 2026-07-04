@@ -17,7 +17,8 @@ enum Classification {
   BINARY_OPERATOR,
   PAREN_KEYWORD,
   OPENER,
-  CLOSER;
+  CLOSER,
+  ;
 
   private static final Set<String> PAREN_KEYWORDS = Set.of(
     "if",

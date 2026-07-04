@@ -69,7 +69,8 @@ enum Sym {
   NULL("null"),
   FOR("for"),
   TRY("try"),
-  THROWS("throws");
+  THROWS("throws"),
+  ;
 
   private static final Map<String, Sym> BY_TEXT = new HashMap<>();
 

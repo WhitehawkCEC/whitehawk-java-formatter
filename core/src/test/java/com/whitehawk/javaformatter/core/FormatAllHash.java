@@ -20,9 +20,9 @@ public final class FormatAllHash {
     MessageDigest digest = MessageDigest.getInstance("SHA-256");
     try (Stream<Path> paths = Files.walk(Path.of(args[0]))) {
       List<Path> files = paths
-        .filter(p -> p.toString().endsWith(".java"))
-        .filter(p -> !p.toString().contains("/target"))
-        .filter(p -> !p.toString().contains("node_modules"))
+        .filter((var p) -> p.toString().endsWith(".java"))
+        .filter((var p) -> !p.toString().contains("/target"))
+        .filter((var p) -> !p.toString().contains("node_modules"))
         .sorted()
         .toList();
       int formatted = 0;

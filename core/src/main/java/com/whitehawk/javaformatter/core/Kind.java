@@ -9,4 +9,5 @@ public enum Kind {
   LINE_COMMENT,
   BLOCK_COMMENT,
   PUNCT,
+  ;
 }

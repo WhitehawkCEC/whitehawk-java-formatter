@@ -304,10 +304,12 @@ public final class Printer {
   }
 
   private boolean endsOperatorElement(int i) {
-    return tokenClasses.has(i, Classification.OPENER) || tokenClasses.has(i, Classification.CLOSER) || switch (tokenSym[i]) {
-      case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
-      default -> false;
-    };
+    return tokenClasses.has(i, Classification.OPENER)
+      || tokenClasses.has(i, Classification.CLOSER)
+      || switch (tokenSym[i]) {
+           case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
+           default -> false;
+         };
   }
 
   private static boolean isStringLiteral(Token t) {
@@ -321,7 +323,8 @@ public final class Printer {
       || t.kind() == Kind.TEXT_BLOCK
       || t.kind() == Kind.CHAR
       || t.kind() == Kind.NUMBER
-      || t.kind() == Kind.IDENT && !t.isKeyword();
+      || t.kind() == Kind.IDENT
+      && !t.isKeyword();
   }
 
   private void buildLines() {
@@ -425,7 +428,10 @@ public final class Printer {
       Line line = lines.get(li);
       // A too-long line whose base-depth structure is a ternary breaks at `?`/`:` rather than
       // isolating a bracket group nested in its condition.
-      List<Integer> ternary = topLevelTernaryOperators(line.firstToken(), line.firstToken() + line.tokenCount() - 1);
+      List<Integer> ternary = topLevelTernaryOperators(
+        line.firstToken(),
+        line.firstToken() + line.tokenCount() - 1
+      );
       if (!ternary.isEmpty() && !breakBefore[ternary.get(0)]) {
         for (int b : ternary) {
           breakBefore[b] = true;
@@ -437,7 +443,10 @@ public final class Printer {
       // A too-long condition breaks at its logical operators rather than isolating a bracket group
       // nested in one operand; a single seeded break then spreads to every operator via
       // forceLogicalBreaks.
-      List<Integer> logical = topLevelLogicalOperators(line.firstToken(), line.firstToken() + line.tokenCount() - 1);
+      List<Integer> logical = topLevelLogicalOperators(
+        line.firstToken(),
+        line.firstToken() + line.tokenCount() - 1
+      );
       if (!logical.isEmpty() && !breakBefore[logical.get(0)]) {
         for (int b : logical) {
           breakBefore[b] = true;
@@ -513,7 +522,11 @@ public final class Printer {
     int generic = 0;
     for (int j = i; j < tokens.size(); j++) {
       Sym sym = tokenSym[j];
-      if (depth == 0 && generic == 0 && (tokenClasses.has(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)) {
+      if (
+        depth == 0
+          && generic == 0
+          && (tokenClasses.has(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)
+      ) {
         return j - 1;
       }
       if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
@@ -862,7 +875,9 @@ public final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER) ? scopeFor(stack, firstSym).contentIndent : indent;
+      int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER)
+        ? scopeFor(stack, firstSym).contentIndent
+        : indent;
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
@@ -870,9 +885,9 @@ public final class Printer {
       walkLine(stack, line, indent, continuation);
     }
     for (int ci : pendingComments) {
-      lineIndent[ci] = tokens.get(
-        lines.get(ci).firstToken()
-      ).atColumn0() ? 0 : stack.peek().contentIndent;
+      lineIndent[ci] = tokens
+        .get(lines.get(ci).firstToken())
+        .atColumn0() ? 0 : stack.peek().contentIndent;
     }
     if (consumeMarksChanged()) {
       for (int i = 1; i < tokens.size(); i++) {
@@ -1196,7 +1211,8 @@ public final class Printer {
     if (beforeOpen >= 0) {
       Token before = tokens.get(beforeOpen);
       if (
-        before.kind() == Kind.IDENT && !tokenClasses.has(beforeOpen, Classification.KEYWORD)
+        before.kind() == Kind.IDENT
+          && !tokenClasses.has(beforeOpen, Classification.KEYWORD)
           || tokenSym[beforeOpen] == Sym.RPAREN
           || tokenSym[beforeOpen] == Sym.RBRACKET
       ) {
@@ -1211,7 +1227,8 @@ public final class Printer {
     return switch (tokenSym[nextIndex]) {
       case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
-      default -> next.kind() != Kind.PUNCT && !tokenClasses.has(nextIndex, Classification.KEYWORD)
+      default -> next.kind() != Kind.PUNCT
+        && !tokenClasses.has(nextIndex, Classification.KEYWORD)
         || next.kind() == Kind.NUMBER
         || next.kind() == Kind.STRING
         || next.kind() == Kind.CHAR
@@ -1280,10 +1297,10 @@ public final class Printer {
     }
     boolean plausibleFollower = tokens.get(followerIndex).kind() == Kind.IDENT
       || switch (tokenSym[followerIndex]) {
-        case LPAREN, RPAREN, COMMA, DOT, METHOD_REF, SEMI, LBRACKET, LBRACE, GT, GT_GT, GT_GT_GT,
-          ELLIPSIS, AMP, ARROW, ASSIGN, AT -> true;
-        default -> false;
-      };
+           case LPAREN, RPAREN, COMMA, DOT, METHOD_REF, SEMI, LBRACKET, LBRACE, GT, GT_GT, GT_GT_GT,
+             ELLIPSIS, AMP, ARROW, ASSIGN, AT -> true;
+           default -> false;
+         };
     return plausibleFollower ? end : -1;
   }
 
@@ -1306,7 +1323,8 @@ public final class Printer {
         default -> {
           if (
             t.kind() != Kind.IDENT
-              || tokenClasses.has(i, Classification.KEYWORD) && !tokenClasses.has(i, Classification.PRIMITIVE)
+              || tokenClasses.has(i, Classification.KEYWORD)
+              && !tokenClasses.has(i, Classification.PRIMITIVE)
           ) {
             return -1;
           }
@@ -1619,7 +1637,8 @@ public final class Printer {
       return tokenClasses.has(prevIndex, Classification.PAREN_KEYWORD)
         || prevSym == Sym.DO
         || prevSym == Sym.ELSE
-        || tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR) && !marks.has(prevIndex, Mark.GENERIC_ANGLE)
+        || tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR)
+        && !marks.has(prevIndex, Mark.GENERIC_ANGLE)
         || prevSym == Sym.SEMI
         || prevSym == Sym.COMMA;
     }

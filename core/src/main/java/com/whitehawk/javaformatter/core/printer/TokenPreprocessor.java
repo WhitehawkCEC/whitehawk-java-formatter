@@ -281,7 +281,8 @@ final class TokenPreprocessor {
         || p.is("]")
         || p.is("extends")
         || p.is("super")
-        || p.kind() == Kind.IDENT && !p.isKeyword();
+        || p.kind() == Kind.IDENT
+        && !p.isKeyword();
       if (!labelPart) {
         break;
       }

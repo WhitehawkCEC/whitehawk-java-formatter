@@ -15,6 +15,7 @@ final class Scope {
     PAREN,
     BRACKET,
     ARRAY_INIT,
+    ;
   }
 
   Kind kind;
