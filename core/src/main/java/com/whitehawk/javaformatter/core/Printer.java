@@ -21,6 +21,9 @@ import java.util.Set;
 /// call (and each broken call whose arguments fit collapses back onto its own line), and a string
 /// concatenation the input broke before a `+` of keeps that break, and a `&&`/`||` the input broke
 /// before keeps that break and spreads it to the element's other operators of the same text. A
+/// break directly after `=` moves into the right-hand side instead: a ternary breaks before its
+/// `?` and `:`, a chain of two or more calls breaks before every call, and anything else rejoins
+/// its assignment and is wrapped like any long line. A
 /// line wider
 /// than the line limit is wrapped the same way: its last outermost bracket
 /// group gets the opener and closer isolated, repeatedly until every line fits (or no group is
@@ -794,6 +797,14 @@ final class Printer {
 
   String print() {
     analyze(null);
+    // A soft break directly after `=` is never canonical: move it into the right-hand side before
+    // wrapping, so the side re-breaks at its own structure.
+    if (moveAssignmentBreaks()) {
+      lines.clear();
+      buildLines();
+      lineIndent = new int[lines.size()];
+      analyze(null);
+    }
     while (wrapLongLines() | breakGroupElements()) {
       lines.clear();
       buildLines();
@@ -903,6 +914,158 @@ final class Printer {
       }
     }
     return changed;
+  }
+
+  /// Moves each soft input break directly after an `=` into the right-hand side, which canonical
+  /// style breaks at its own structure instead: a side holding a top-level ternary breaks before
+  /// its `?` and `:`, one holding a chain of two or more calls breaks before every call, and any
+  /// other side rejoins its assignment — when the joined line fits, or when isolating its last
+  /// bracket group leaves a fitting head line for the long-line wrap. A side that already spans
+  /// lines keeps its existing breaks. Returns whether any break changed.
+  private boolean moveAssignmentBreaks() {
+    boolean changed = false;
+    for (int i = 1; i < tokens.size(); i++) {
+      if (!breakBefore[i] || forcedBreak[i] || !tokens.get(i - 1).is("=")) {
+        continue;
+      }
+      int end = rhsEnd(i);
+      if (end < i) {
+        continue;
+      }
+      List<Integer> breaks = topLevelTernaryOperators(i, end);
+      if (breaks.isEmpty()) {
+        breaks = topLevelChainDots(i, end);
+        if (breaks.size() < 2) {
+          if (joinAllowsWrap(i)) {
+            breakBefore[i] = false;
+            changed = true;
+          }
+          continue;
+        }
+      }
+      for (int b : breaks) {
+        breakBefore[b] = true;
+        forcedBreak[b] = true;
+      }
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Index of the last token of the right-hand side starting at `i`: the token before the next
+  /// `;` or `,` at the side's own depth or before the closer of an enclosing group. Returns -1
+  /// when the side spans lines or holds a multiline token, and cannot be re-wrapped from scratch.
+  private int rhsEnd(int i) {
+    int depth = 0;
+    int generic = 0;
+    for (int j = i; j < tokens.size(); j++) {
+      Token t = tokens.get(j);
+      if (depth == 0 && generic == 0 && (isCloser(t) || t.is(";") || t.is(","))) {
+        return j - 1;
+      }
+      if (j > i && breakBefore[j] || tokenWidth[j] < 0) {
+        return -1;
+      }
+      if ((marks[j] & GENERIC_ANGLE) != 0) {
+        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+      } else if (t.is("(") || t.is("[") || t.is("{")) {
+        depth++;
+      } else if (isCloser(t)) {
+        depth--;
+      }
+    }
+    return tokens.size() - 1;
+  }
+
+  /// The `?` and `:` operators of the conditionals at the top level of `i..end` — bracket depth
+  /// zero, outside type arguments — or an empty list when the range holds no conditional.
+  private List<Integer> topLevelTernaryOperators(int i, int end) {
+    List<Integer> ops = new ArrayList<>();
+    int depth = 0;
+    int generic = 0;
+    for (int j = i; j <= end; j++) {
+      Token t = tokens.get(j);
+      if ((marks[j] & GENERIC_ANGLE) != 0) {
+        generic += t.is("<") ? 1 : -t.text().length(); // `>`, `>>`, `>>>`
+      } else if (t.is("(") || t.is("[") || t.is("{")) {
+        depth++;
+      } else if (isCloser(t)) {
+        depth--;
+      } else if (
+        depth == 0 && generic == 0 && (marks[j] & WILDCARD) == 0
+          && (t.is("?") || t.is(":") && !ops.isEmpty())
+      ) {
+        ops.add(j);
+      }
+    }
+    return ops;
+  }
+
+  /// The call dots of the method chain at the top level of `i..end`: the first `.name(` at
+  /// bracket depth zero and every call linked directly onto the previous call's result.
+  private List<Integer> topLevelChainDots(int i, int end) {
+    int dot = -1;
+    for (int j = i; j <= end && dot < 0; j++) {
+      Token t = tokens.get(j);
+      if ((t.is("(") || t.is("[") || t.is("{")) && matchClose[j] > j) {
+        j = matchClose[j];
+      } else if (isCallDot(j)) {
+        dot = j;
+      }
+    }
+    List<Integer> dots = new ArrayList<>();
+    while (dot >= 0 && dot <= end && isCallDot(dot)) {
+      dots.add(dot);
+      int close = matchClose[indexOfNextCode(indexOfNextCode(dot))];
+      if (close < 0) {
+        break;
+      }
+      dot = indexOfNextCode(close);
+    }
+    return dots;
+  }
+
+  /// Whether clearing the break at `i` (a line-starting token) still lets the output fit: the
+  /// joined line stays within the limit, or the long-line wrap can isolate the joined line's last
+  /// outermost bracket group and leave a fitting head line.
+  private boolean joinAllowsWrap(int i) {
+    int li = lineIndexOf(i);
+    if (hasMultilineToken(li - 1, li)) {
+      return false;
+    }
+    int joined = lineWidth(li - 1) + (spaceBefore[i] ? 1 : 0) + lineWidth(li) - lineIndent[li];
+    if (joined <= MAX_WIDTH) {
+      return true;
+    }
+    int start = lines.get(li - 1).firstToken();
+    Line line = lines.get(li);
+    int end = line.firstToken() + line.tokenCount();
+    int open = -1;
+    for (int j = start; j < end; j++) {
+      Token t = tokens.get(j);
+      if (!t.is("(") && !t.is("[") && !t.is("{")) {
+        continue;
+      }
+      int c = matchClose[j];
+      if (c < 0 || c >= end) {
+        break; // the rest of the joined line is nested inside this group
+      }
+      if (c > j + 1) {
+        open = j;
+      }
+      j = c; // skip the contents: only groups outermost within the joined line count
+    }
+    if (open < 0) {
+      return false;
+    }
+    int width = lineIndent[li - 1];
+    for (int j = start; j <= open; j++) {
+      if (j > start && spaceBefore[j]) {
+        width++;
+      }
+      width += tokenWidth[j];
+    }
+    return width <= MAX_WIDTH;
   }
 
   /// Collapses the argument paren of a broken method chain's call when the whole call — from its
