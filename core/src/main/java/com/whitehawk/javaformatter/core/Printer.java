@@ -281,6 +281,9 @@ final class Printer {
   /// -1 elsewhere and at unbalanced brackets.
   private final int[] matchOpen;
   private final int[] matchClose;
+  /// Innermost opener whose group is still open at each token (at a closer, the opener it
+  /// closes); -1 at top level. Walking these indices climbs the enclosing groups.
+  private final int[] enclosingOpen;
   /// Output width per token, or -1 for a multiline token (text block, block comment).
   private final int[] tokenWidth;
   /// Classes of each token's text, resolved once.
@@ -299,6 +302,7 @@ final class Printer {
     this.tokenLine = new int[n];
     this.matchOpen = new int[n];
     this.matchClose = new int[n];
+    this.enclosingOpen = new int[n];
     this.tokenWidth = new int[n];
     @SuppressWarnings("unchecked")
     EnumSet<Classification>[] tokenClasses = (EnumSet<Classification>[]) new EnumSet<?>[n];
@@ -336,6 +340,7 @@ final class Printer {
     int[] openers = new int[tokens.size()];
     int depth = 0;
     for (int i = 0; i < tokens.size(); i++) {
+      enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
       if (isOpener(i)) {
         openers[depth++] = i;
       } else if (isCloser(i) && depth > 0) {
@@ -1364,13 +1369,9 @@ final class Printer {
   /// closer is isolated on its own line and that encloses the whole call. Such a call belongs to a
   /// chain the surrounding group already lays out multiline, so its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
-    for (int o = dot - 1; o >= 0; o--) {
+    for (int o = enclosingOpen[dot]; o >= 0; o = enclosingOpen[o]) {
       if (tokens.get(o).is("(") && matchClose[o] > close && breakBefore[matchClose[o]]) {
         return true;
-      }
-      // A group closed before `dot` cannot enclose the call: skip its contents whole.
-      if (isCloser(o) && matchOpen[o] >= 0) {
-        o = matchOpen[o];
       }
     }
     return false;
