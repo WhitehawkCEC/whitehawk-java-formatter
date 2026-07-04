@@ -1713,47 +1713,39 @@ final class Printer {
     Scope top = stack.peek();
     updateAnnotationState(top, t);
 
-    switch (t.text()) {
-      case "(" -> {
+    Sym sym = tokenSym[i];
+    switch (sym) {
+      case LPAREN -> {
         Scope scope = new Scope('P', indent + INDENT, indent);
-        scope.forParen = wordBefore(i, "for") || wordBefore(i, "try");
+        int prev = indexOfPrevCode(i);
+        scope.forParen = prev >= 0 && (tokenSym[prev] == Sym.FOR || tokenSym[prev] == Sym.TRY);
         stack.push(scope);
-        return;
       }
-      case "[" -> {
-        stack.push(new Scope('K', indent + INDENT, indent));
-        return;
-      }
-      case "{" -> {
-        stack.push(openBrace(stack, i, indent));
-        return;
-      }
-      case ")", "]" -> {
+      case LBRACKET -> stack.push(new Scope('K', indent + INDENT, indent));
+      case LBRACE -> stack.push(openBrace(stack, i, indent));
+      case RPAREN, RBRACKET -> {
         Scope closed = stack.peek();
         if (stack.size() > 1) {
           stack.pop();
         }
-        if (t.is(")") && isCast(closed, i)) {
+        if (sym == Sym.RPAREN && isCast(closed, i)) {
           marks.setCastClose(i);
         }
-        afterContentToken(stack.peek(), t.is("]")); // `]` can end an array type in a cast
-        return;
+        afterContentToken(stack.peek(), sym == Sym.RBRACKET); // `]` can end an array type in a cast
       }
-      case "}" -> {
+      case RBRACE -> {
         if (stack.size() > 1) {
           stack.pop();
         }
-        return;
       }
-      case ";" -> {
+      case SEMI -> {
         if (top.kind == 'P' || top.kind == 'K') {
           resetElement(top); // for-loop sections and try-with-resources
         } else {
           closeElement(top);
         }
-        return;
       }
-      case "," -> {
+      case COMMA -> {
         if (
           top.generic == 0 && (
             top.kind == 'P' || top.kind == 'K' || top.kind == 'A' || top.kind == 'E'
@@ -1761,9 +1753,8 @@ final class Printer {
         ) {
           resetElement(top);
         }
-        return;
       }
-      case "<" -> {
+      case LT -> {
         if (!marks.isGenericAngle(i) && !marks.isAngleScanned(i)) {
           marks.setAngleScanned(i);
           int end = typeArgumentsEnd(i);
@@ -1776,17 +1767,15 @@ final class Printer {
         } else {
           afterContentToken(top, false);
         }
-        return;
       }
-      case ">", ">>", ">>>" -> {
+      case GT, GT_GT, GT_GT_GT -> {
         if (marks.isGenericAngle(i)) {
           top.generic = Math.max(0, top.generic - t.text().length());
         } else {
           afterContentToken(top, false);
         }
-        return;
       }
-      case "?" -> {
+      case QUESTION -> {
         if (top.generic > 0) {
           marks.setWildcard(i);
         } else {
@@ -1796,25 +1785,20 @@ final class Printer {
           top.ternaryIndents.push(breakBefore[i] ? indent : top.elementStartIndent + INDENT);
           afterContentToken(top, false);
         }
-        return;
       }
-      case ":" -> {
-        analyzeColon(stack, i, top);
-        return;
-      }
-      case "+", "-", "++", "--", "!", "~" -> {
+      case COLON -> analyzeColon(stack, i, top);
+      case PLUS, MINUS, INCREMENT, DECREMENT, BANG, TILDE -> {
         if (isUnaryPosition(i)) {
           marks.setUnary(i);
         }
         afterContentToken(top, false);
-        return;
       }
       default -> {
-        if (t.is("switch")) {
+        if (sym == Sym.SWITCH) {
           top.sawSwitch = true;
-        } else if (t.is("enum")) {
+        } else if (sym == Sym.ENUM) {
           top.sawEnum = true;
-        } else if (t.is("assert")) {
+        } else if (sym == Sym.ASSERT) {
           top.sawAssert = true;
         }
         if (hasClass(i, Classification.PRIMITIVE)) {
@@ -1825,19 +1809,18 @@ final class Printer {
           && (
             !hasClass(i, Classification.KEYWORD)
               || hasClass(i, Classification.PRIMITIVE)
-              || t.is("extends")
-              || t.is("super")
+              || sym == Sym.EXTENDS
+              || sym == Sym.SUPER
           )
-          || t.is(".")
-          || t.is("@")
-          || t.is("&")
+          || sym == Sym.DOT
+          || sym == Sym.AT
+          || sym == Sym.AMP
           && top.generic > 0;
         if (word && top.lastWasWord && top.generic == 0) {
           top.typeLike = false; // two adjacent words at top level cannot be a cast type
         }
         afterContentToken(top, typeToken);
         top.lastWasWord = word;
-        return;
       }
     }
   }
@@ -1857,11 +1840,6 @@ final class Printer {
     if (!typeToken) {
       scope.typeLike = false;
     }
-  }
-
-  private boolean wordBefore(int i, String word) {
-    Token prev = prevCode(i);
-    return prev != null && prev.is(word);
   }
 
   private Scope openBrace(Deque<Scope> stack, int i, int indent) {
