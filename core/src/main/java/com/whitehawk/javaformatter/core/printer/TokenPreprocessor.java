@@ -20,9 +20,102 @@ final class TokenPreprocessor {
   private TokenPreprocessor() {}
 
   static List<Token> preprocess(List<Token> tokens) {
-    return insertMissingBraces(
-      expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
+    return parenthesizeSwitchOperands(
+      insertMissingBraces(
+        expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
+      )
     );
+  }
+
+  /// A `switch` combined with one of these reads as an operand and gets parenthesized; assignment,
+  /// `->`, and the ternary `?`/`:` are excluded so `x = switch`, `case y -> switch`, and
+  /// `c ? switch : ..` keep their bare form (as do `return`/`yield`, which aren't operators).
+  private static final Set<String> SWITCH_OPERAND_OPERATORS = Set.of(
+    "||",
+    "&&",
+    "|",
+    "&",
+    "^",
+    "==",
+    "!=",
+    "<",
+    ">",
+    "<=",
+    ">=",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "<<",
+    ">>",
+    ">>>"
+  );
+
+  /// Canonical style wraps a `switch` expression used as a binary operand in parens, so it reads as
+  /// a nested group instead of running into the operators around it.
+  private static List<Token> parenthesizeSwitchOperands(List<Token> in) {
+    int n = in.size();
+    int[] close = matchAllBrackets(in);
+    List<int[]> wraps = new ArrayList<>(); // {switchIndex, bodyCloseInclusive}
+    for (int i = 0; i < n; i++) {
+      if (!in.get(i).is("switch")) {
+        continue;
+      }
+      int paren = nextCodeIndex(in, i);
+      if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+        continue;
+      }
+      int brace = nextCodeIndex(in, close[paren]);
+      if (brace < 0 || !in.get(brace).is("{") || close[brace] < 0) {
+        continue;
+      }
+      if (isBinaryOperand(in, i, close[brace])) {
+        wraps.add(new int[] { i, close[brace] });
+      }
+    }
+    if (wraps.isEmpty()) {
+      return in;
+    }
+    return applyParenWraps(in, wraps);
+  }
+
+  private static boolean isBinaryOperand(List<Token> in, int switchIndex, int bodyClose) {
+    int prev = prevCodeIndex(in, switchIndex);
+    if (prev >= 0 && SWITCH_OPERAND_OPERATORS.contains(in.get(prev).text())) {
+      return true;
+    }
+    int next = nextCodeIndex(in, bodyClose);
+    return next >= 0 && SWITCH_OPERAND_OPERATORS.contains(in.get(next).text());
+  }
+
+  private static List<Token> applyParenWraps(List<Token> in, List<int[]> wraps) {
+    int n = in.size();
+    int[] opensBefore = new int[n];
+    int[] closesAfter = new int[n];
+    for (int[] w : wraps) {
+      opensBefore[w[0]]++;
+      closesAfter[w[1]]++;
+    }
+    List<Token> out = new ArrayList<>(n + 2 * wraps.size());
+    for (int i = 0; i < n; i++) {
+      Token t = in.get(i);
+      if (opensBefore[i] > 0) {
+        // The `(` takes the switch's leading break so the switch stays on the paren's line; a
+        // multiline body then isolates the `(`/`)` under the printer's usual bracket layout.
+        for (int k = 0; k < opensBefore[i]; k++) {
+          out.add(
+            new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+          );
+        }
+        t = new Token(t.kind(), t.text(), t.start(), t.end(), 0, false);
+      }
+      out.add(t);
+      for (int k = 0; k < closesAfter[i]; k++) {
+        out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
+      }
+    }
+    return out;
   }
 
   /// Canonical style terminates an enum's constant list with a trailing comma followed by `;`. A
