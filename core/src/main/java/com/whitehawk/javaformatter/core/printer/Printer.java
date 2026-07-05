@@ -1673,15 +1673,11 @@ public final class Printer {
 
   private boolean spaceBeforePrefix(int prevIndex) {
     Sym prevSym = tokenSym[prevIndex];
-    if (
-      prevSym == Sym.LPAREN
-        || prevSym == Sym.LBRACKET
-        || prevSym == Sym.BANG
-        || prevSym == Sym.TILDE
-        || prevSym == Sym.AT
-        || prevSym == Sym.DOT
-        || prevSym == Sym.METHOD_REF
-    ) {
+    boolean tightBefore = switch (prevSym) {
+      case LPAREN, LBRACKET, BANG, TILDE, AT, DOT, METHOD_REF -> true;
+      default -> false;
+    };
+    if (tightBefore) {
       return false;
     }
     if (marks.has(prevIndex, Mark.UNARY)) {
