@@ -316,13 +316,17 @@ public final class Printer {
     return t.kind() == Kind.STRING || t.kind() == Kind.TEXT_BLOCK;
   }
 
+  private static boolean isLiteral(Token t) {
+    return switch (t.kind()) {
+      case NUMBER, STRING, CHAR, TEXT_BLOCK -> true;
+      default -> false;
+    };
+  }
+
   private static boolean endsOperand(Token t) {
     return t.is(")")
       || t.is("]")
-      || t.kind() == Kind.STRING
-      || t.kind() == Kind.TEXT_BLOCK
-      || t.kind() == Kind.CHAR
-      || t.kind() == Kind.NUMBER
+      || isLiteral(t)
       || t.kind() == Kind.IDENT
       && !t.isKeyword();
   }
@@ -1229,10 +1233,7 @@ public final class Printer {
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
       default -> next.kind() != Kind.PUNCT
         && !tokenClasses.has(nextIndex, Classification.KEYWORD)
-        || next.kind() == Kind.NUMBER
-        || next.kind() == Kind.STRING
-        || next.kind() == Kind.CHAR
-        || next.kind() == Kind.TEXT_BLOCK;
+        || isLiteral(next);
     };
   }
 
@@ -1242,12 +1243,7 @@ public final class Printer {
       return true;
     }
     Token prev = tokens.get(prevIndex);
-    if (
-      prev.kind() == Kind.NUMBER
-        || prev.kind() == Kind.STRING
-        || prev.kind() == Kind.CHAR
-        || prev.kind() == Kind.TEXT_BLOCK
-    ) {
+    if (isLiteral(prev)) {
       return false;
     }
     Sym prevSym = tokenSym[prevIndex];
