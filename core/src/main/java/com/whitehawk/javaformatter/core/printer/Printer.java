@@ -1004,14 +1004,7 @@ public final class Printer {
         }
       }
       case COMMA -> {
-        if (
-          top.generic == 0 && (
-            top.kind == Scope.Kind.PAREN
-              || top.kind == Scope.Kind.BRACKET
-              || top.kind == Scope.Kind.ARRAY_INIT
-              || top.kind == Scope.Kind.ENUM_BODY
-          )
-        ) {
+        if (top.generic == 0 && top.kind.hasElements()) {
           resetElement(top);
         }
       }
@@ -1177,12 +1170,7 @@ public final class Printer {
     scope.hasContent = false;
     scope.lastWasWord = false;
     scope.annotationState = 0;
-    if (
-      scope.kind == Scope.Kind.PAREN
-        || scope.kind == Scope.Kind.BRACKET
-        || scope.kind == Scope.Kind.ARRAY_INIT
-        || scope.kind == Scope.Kind.ENUM_BODY
-    ) {
+    if (scope.kind.hasElements()) {
       scope.elementOpen = false;
     }
   }

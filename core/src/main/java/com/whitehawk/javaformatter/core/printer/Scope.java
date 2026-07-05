@@ -16,6 +16,14 @@ final class Scope {
     BRACKET,
     ARRAY_INIT,
     ;
+
+    /// Whether this scope's direct children are comma-separated elements.
+    boolean hasElements() {
+      return switch (this) {
+        case PAREN, BRACKET, ARRAY_INIT, ENUM_BODY -> true;
+        case BLOCK, SWITCH_BODY -> false;
+      };
+    }
   }
 
   Kind kind;
