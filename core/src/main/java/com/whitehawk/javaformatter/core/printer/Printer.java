@@ -470,7 +470,8 @@ public final class Printer {
         if (c < 0 || c >= end) {
           break; // the rest of the line is nested inside this group
         }
-        if (c > i + 1) {
+        // A cast paren wraps to nothing useful: isolating it strands the type on its own line.
+        if (c > i + 1 && !marks.has(c, Mark.CAST_CLOSE)) {
           open = i;
           close = c;
         }
