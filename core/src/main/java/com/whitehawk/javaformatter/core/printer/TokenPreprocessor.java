@@ -93,8 +93,10 @@ final class TokenPreprocessor {
 
   /// Canonical style wraps a multiline method chain used as a binary operand in parens, so the
   /// chain reads as a nested group indented under its own line instead of hanging off the operator.
-  /// A single-line chain (one that would not break anyway) keeps its bare form, as does a chain in a
-  /// non-operand position (`return`/`=`/`->`/ternary branch).
+  /// Only a chain that *follows* an operator (`&&`/`||`/..) is wrapped; a leading operand chain
+  /// starts on the statement's own line and reads fine bare. A single-line chain (one that would not
+  /// break anyway) keeps its bare form, as does a chain in a non-operand position (`return`/`=`/`->`/
+  /// ternary branch).
   private static List<Token> parenthesizeChainOperands(List<Token> in) {
     int n = in.size();
     int[] close = matchAllBrackets(in);
@@ -140,7 +142,8 @@ final class TokenPreprocessor {
         continue; // a single-line chain would not break, so needs no parens
       }
       int chainStart = chainReceiverStart(in, open, p);
-      if (isBinaryOperand(in, chainStart, chainEnd)) {
+      int prev = prevCodeIndex(in, chainStart);
+      if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).text())) {
         wraps.add(new int[] { chainStart, chainEnd });
       }
     }
