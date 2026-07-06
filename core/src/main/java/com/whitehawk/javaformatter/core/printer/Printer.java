@@ -242,11 +242,39 @@ public final class Printer {
   }
 
   /// Keeps an already-broken string-concatenation `+`, so a piecewise-built literal (e.g. a regex
-  /// split across lines) is not collapsed back onto one line.
+  /// split across lines) is not collapsed back onto one line. The break then spreads to every `+`
+  /// of the chain, so a concatenation wrapped at one operand wraps at every operand — no sibling
+  /// `+` (e.g. two calls whose operands are not themselves string literals) is left crammed onto a
+  /// line while the rest break.
   private void forceConcatBreaks() {
+    // An operator reached by an earlier operator's spread needs no scan of its own: the spread
+    // already covered every `+` of the chain.
+    boolean[] spread = new boolean[tokens.size()];
     for (int i = 0; i < tokens.size(); i++) {
-      if (breakBefore[i] && isStringConcatPlus(i)) {
-        forcedBreak[i] = true;
+      if (!breakBefore[i] || spread[i] || !isStringConcatPlus(i)) {
+        continue;
+      }
+      forcedBreak[i] = true;
+      for (int j = i - 1; j >= 0; j--) {
+        if (tokenClasses.has(j, Classification.CLOSER) && matchOpen[j] >= 0) {
+          j = matchOpen[j]; // a nested group is skipped whole
+        } else if (endsOperatorElement(j)) {
+          break;
+        } else if (tokenSym[j] == Sym.PLUS) {
+          breakBefore[j] = true;
+          forcedBreak[j] = true;
+        }
+      }
+      for (int j = i + 1; j < tokens.size(); j++) {
+        if (tokenClasses.has(j, Classification.OPENER) && matchClose[j] >= 0) {
+          j = matchClose[j];
+        } else if (endsOperatorElement(j)) {
+          break;
+        } else if (tokenSym[j] == Sym.PLUS) {
+          breakBefore[j] = true;
+          forcedBreak[j] = true;
+          spread[j] = true;
+        }
       }
     }
   }
