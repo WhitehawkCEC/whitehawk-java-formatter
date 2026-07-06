@@ -1,11 +1,14 @@
 package com.whitehawk.javaformatter.core;
 
+import org.jspecify.annotations.NullMarked;
+
 import java.util.Set;
 
 /// @param start          offset of the first character in the source
 /// @param end            offset just past the last character
 /// @param newlinesBefore line terminators between the previous token and this one
 /// @param atColumn0      token starts at the very beginning of its line
+@NullMarked
 public record Token(
   Kind kind,
   String text,
