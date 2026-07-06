@@ -883,6 +883,11 @@ public final class Printer {
       int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER)
         ? scopeFor(stack, firstSym).contentIndent
         : indent;
+      // A comment preceding a case label belongs to the previous case's body, so indent it one
+      // level deeper than the label rather than aligning it with the label.
+      if (top.kind == Scope.Kind.SWITCH_BODY && (firstSym == Sym.CASE || firstSym == Sym.DEFAULT)) {
+        bodyIndent += INDENT;
+      }
       for (int ci : pendingComments) {
         lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
