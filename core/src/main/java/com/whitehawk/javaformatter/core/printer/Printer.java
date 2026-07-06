@@ -542,6 +542,13 @@ public final class Printer {
       }
       int end = rhsEnd(i);
       if (end < i) {
+        // The side already spans lines, but if its first break hangs a binary operator its own
+        // structure carries the continuation: drop the break after `=` to seat the first operand
+        // on the assignment line.
+        if (rhsBreaksAtOperator(i) && joinAllowsWrap(i)) {
+          breakBefore[i] = false;
+          changed = true;
+        }
         continue;
       }
       List<Integer> breaks = topLevelTernaryOperators(i, end);
@@ -590,6 +597,55 @@ public final class Printer {
       }
     }
     return tokens.size() - 1;
+  }
+
+  /// The right-hand side starting at `i` keeps its head on one line and takes its first break at a
+  /// top-level binary operator, so seating that head on the assignment line leaves a well-formed
+  /// operator continuation behind.
+  private boolean rhsBreaksAtOperator(int i) {
+    int depth = 0;
+    int generic = 0;
+    for (int j = i; j < tokens.size(); j++) {
+      Sym sym = tokenSym[j];
+      if (
+        depth == 0
+          && generic == 0
+          && (tokenClasses.has(j, Classification.CLOSER) || sym == Sym.SEMI || sym == Sym.COMMA)
+      ) {
+        return false;
+      }
+      if (j > i && breakBefore[j]) {
+        return depth == 0 && generic == 0 && leadsBinaryOperator(j);
+      }
+      if (tokenWidth[j] < 0) {
+        return false;
+      }
+      if (marks.has(j, Mark.GENERIC_ANGLE)) {
+        generic += angleDepthDelta(j);
+      } else if (tokenClasses.has(j, Classification.OPENER)) {
+        depth++;
+      } else if (tokenClasses.has(j, Classification.CLOSER)) {
+        depth--;
+      }
+    }
+    return false;
+  }
+
+  /// A break lands on a hung binary operator: the previous code token finishes an operand and the
+  /// break token is an infix operator, so the operator leads its continuation line.
+  private boolean leadsBinaryOperator(int j) {
+    if (marks.has(j, Mark.GENERIC_ANGLE) || marks.has(j, Mark.UNARY)) {
+      return false;
+    }
+    Token prev = prevCode(j);
+    if (prev == null || !endsOperand(prev)) {
+      return false;
+    }
+    return switch (tokens.get(j).text()) {
+      case "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=", ">=", "==",
+          "!=", "&&", "||", "instanceof" -> true;
+      default -> false;
+    };
   }
 
   /// A grouping paren (preceded by an operator, not a call name, argument opener, or control-flow
