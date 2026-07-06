@@ -926,9 +926,12 @@ public final class Printer {
       int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER)
         ? scopeFor(stack, firstSym).contentIndent
         : indent;
-      // A comment preceding a case label belongs to the previous case's body, so indent it one
-      // level deeper than the label rather than aligning it with the label.
-      if (top.kind == Scope.Kind.SWITCH_BODY && (firstSym == Sym.CASE || firstSym == Sym.DEFAULT)) {
+      // A comment preceding a colon-style case label belongs to the previous case's fallthrough
+      // body, so indent it one level deeper than the label. Arrow-style cases don't fall through,
+      // so a comment there introduces the next case and aligns with the label.
+      if (top.kind == Scope.Kind.SWITCH_BODY
+        && (firstSym == Sym.CASE || firstSym == Sym.DEFAULT)
+        && isColonCaseLine(line)) {
         bodyIndent += INDENT;
       }
       for (int ci : pendingComments) {
@@ -962,6 +965,17 @@ public final class Printer {
       return top.ternaryIndents.peek();
     }
     return top.elementStartIndent + INDENT;
+  }
+
+  /// A case label line is colon-style unless it carries an arrow (`case X ->`); arrow cases don't
+  /// fall through into the next label.
+  private boolean isColonCaseLine(Line line) {
+    for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
+      if (tokenSym[i] == Sym.ARROW) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private boolean isCommentOnly(Line line) {
