@@ -576,13 +576,14 @@ public final class Printer {
     return tokens.size() - 1;
   }
 
-  /// A grouping paren (preceded by an operator, not a call name or control-flow keyword) whose sole
-  /// top-level content is a conditional expression. Call and control-flow parens keep the single
-  /// content indent.
+  /// A grouping paren (preceded by an operator, not a call name, argument opener, or control-flow
+  /// keyword) whose sole top-level content is a conditional expression. Call and control-flow parens
+  /// keep the single content indent.
   private boolean wrapsConditional(int open, int prev) {
     if (prev < 0
       || endsOperand(tokens.get(prev))
       || tokenSym[prev] == Sym.COMMA
+      || tokenSym[prev] == Sym.LPAREN
       || tokenClasses.has(prev, Classification.PAREN_KEYWORD)) {
       return false;
     }
