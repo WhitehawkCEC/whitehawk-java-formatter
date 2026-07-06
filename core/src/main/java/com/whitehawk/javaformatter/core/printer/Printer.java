@@ -175,7 +175,7 @@ public final class Printer {
         continue;
       }
       callDot[p] = true;
-      int paren = indexOfNextCode(indexOfNextCode(p));
+      int paren = callParen(p);
       int next = indexOfNextCode(matchClose[paren]);
       if (next >= 0 && isCallDot(next)) {
         nextCall[p] = next;
@@ -194,7 +194,7 @@ public final class Printer {
         continue;
       }
       int last = chain.get(chain.size() - 1);
-      int lastClose = matchClose[indexOfNextCode(indexOfNextCode(last))];
+      int lastClose = matchClose[callParen(last)];
       if (tokenLine[p] != tokenLine[lastClose]) {
         for (int dot : chain) {
           breakBefore[dot] = true;
@@ -233,12 +233,28 @@ public final class Printer {
     if (tokenSym[p] != Sym.DOT) {
       return false;
     }
-    int name = indexOfNextCode(p);
+    int name = callName(p);
     if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
       return false;
     }
     int paren = indexOfNextCode(name);
     return paren >= 0 && tokenSym[paren] == Sym.LPAREN;
+  }
+
+  /// The method-name token of a call `.name(`, skipping an explicit type witness (`.<T> name(`),
+  /// or -1 when the witness angle brackets don't close.
+  private int callName(int dot) {
+    int name = indexOfNextCode(dot);
+    if (name >= 0 && tokenSym[name] == Sym.LT) {
+      int witnessEnd = scanTypeArguments(name);
+      name = witnessEnd < 0 ? -1 : indexOfNextCode(witnessEnd);
+    }
+    return name;
+  }
+
+  /// The `(` opening a chain call's argument list, skipping an explicit type witness.
+  private int callParen(int dot) {
+    return indexOfNextCode(callName(dot));
   }
 
   /// Keeps an already-broken string-concatenation `+`, so a piecewise-built literal (e.g. a regex
@@ -644,7 +660,7 @@ public final class Printer {
     List<Integer> dots = new ArrayList<>();
     while (dot >= 0 && dot <= end && isCallDot(dot)) {
       dots.add(dot);
-      int close = matchClose[indexOfNextCode(indexOfNextCode(dot))];
+      int close = matchClose[callParen(dot)];
       if (close < 0) {
         break;
       }
@@ -694,8 +710,7 @@ public final class Printer {
       if (!breakBefore[dot] || !isCallDot(dot)) {
         continue; // only a call that chain-breaking put on its own line
       }
-      int name = indexOfNextCode(dot);
-      int open = indexOfNextCode(name);
+      int open = callParen(dot);
       int close = matchClose[open];
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list

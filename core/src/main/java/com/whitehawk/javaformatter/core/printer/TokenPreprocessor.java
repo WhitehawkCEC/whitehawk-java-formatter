@@ -162,8 +162,9 @@ final class TokenPreprocessor {
     return paren >= 0 && in.get(paren).is("(") && close[paren] >= 0;
   }
 
-  /// Walks back from a chain's head `.call` over its receiver — a run of identifiers, `.`, and
-  /// matched bracket groups (`foo().bar`, `a.b[i].c`) — so the wrap encloses the whole operand.
+  /// Walks back from a chain's head `.call` over its receiver — a run of identifiers, `.`, matched
+  /// bracket groups (`foo().bar`, `a.b[i].c`), and explicit type witnesses (`foo.<T> bar()`) — so
+  /// the wrap encloses the whole operand rather than starting after a witness's closing `>`.
   private static int chainReceiverStart(List<Token> in, int[] open, int headDot) {
     int start = headDot;
     for (int r = prevCodeIndex(in, headDot); r >= 0; r = prevCodeIndex(in, r)) {
@@ -174,6 +175,14 @@ final class TokenPreprocessor {
         }
         start = open[r];
         r = open[r];
+      } else if (t.is(">") || t.is(">>") || t.is(">>>")) {
+        int lt = typeWitnessOpen(in, r);
+        int dot = lt < 0 ? -1 : prevCodeIndex(in, lt);
+        if (dot < 0 || !in.get(dot).is(".")) {
+          break;
+        }
+        start = dot;
+        r = dot;
       } else if (t.kind() == Kind.IDENT || t.is(".")) {
         start = r;
       } else {
@@ -181,6 +190,29 @@ final class TokenPreprocessor {
       }
     }
     return start;
+  }
+
+  /// Backward-matches the `<` opening the type witness a `>`/`>>`/`>>>` closes, or -1 if this isn't
+  /// a witness close. Type-argument lists never contain `(`/`{`/`;`/`=`, so those bound the scan.
+  private static int typeWitnessOpen(List<Token> in, int gt) {
+    int depth = 0;
+    for (int j = gt; j >= 0; j = prevCodeIndex(in, j)) {
+      Token t = in.get(j);
+      if (t.is(">")) {
+        depth++;
+      } else if (t.is(">>")) {
+        depth += 2;
+      } else if (t.is(">>>")) {
+        depth += 3;
+      } else if (t.is("<")) {
+        if (--depth == 0) {
+          return j;
+        }
+      } else if (t.is("(") || t.is(")") || t.is("{") || t.is("}") || t.is(";") || t.is("=")) {
+        return -1;
+      }
+    }
+    return -1;
   }
 
   private static boolean spansLines(List<Token> in, int from, int toInclusive) {
