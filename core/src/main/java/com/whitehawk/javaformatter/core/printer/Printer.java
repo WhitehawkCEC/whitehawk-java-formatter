@@ -1678,7 +1678,8 @@ public final class Printer {
       return true;
     }
     if (nextSym == Sym.AT) {
-      return prevWord;
+      // A word, or a preceding annotation's `@Foo(..)` / `@Foo[..]`, is followed by a space.
+      return prevWord || prevSym == Sym.RPAREN || prevSym == Sym.RBRACKET;
     }
     if (prevSym == Sym.RPAREN || prevSym == Sym.RBRACKET) {
       return nextWord;
