@@ -576,6 +576,19 @@ public final class Printer {
     return tokens.size() - 1;
   }
 
+  /// A grouping paren (preceded by an operator, not a call name or control-flow keyword) whose sole
+  /// top-level content is a conditional expression. Call and control-flow parens keep the single
+  /// content indent.
+  private boolean wrapsConditional(int open, int prev) {
+    if (prev < 0
+      || endsOperand(tokens.get(prev))
+      || tokenClasses.has(prev, Classification.PAREN_KEYWORD)) {
+      return false;
+    }
+    int close = matchClose[open];
+    return close > open + 1 && !topLevelTernaryOperators(open + 1, close - 1).isEmpty();
+  }
+
   private List<Integer> topLevelTernaryOperators(int i, int end) {
     List<Integer> ops = new ArrayList<>();
     int depth = 0;
@@ -1008,8 +1021,14 @@ public final class Printer {
 
     switch (sym) {
       case LPAREN -> {
-        Scope scope = newScope(Scope.Kind.PAREN, indent + INDENT, indent);
         int prev = indexOfPrevCode(i);
+        // A grouping paren wrapping a conditional gives its body a second indent level, so the
+        // `?`/`:` branches sit below the opener rather than aligning with a call's arguments.
+        int contentIndent = indent + INDENT;
+        if (wrapsConditional(i, prev)) {
+          contentIndent += INDENT;
+        }
+        Scope scope = newScope(Scope.Kind.PAREN, contentIndent, indent);
         scope.forParen = prev >= 0 && (tokenSym[prev] == Sym.FOR || tokenSym[prev] == Sym.TRY);
         stack.push(scope);
       }
