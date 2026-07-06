@@ -582,6 +582,7 @@ public final class Printer {
   private boolean wrapsConditional(int open, int prev) {
     if (prev < 0
       || endsOperand(tokens.get(prev))
+      || tokenSym[prev] == Sym.COMMA
       || tokenClasses.has(prev, Classification.PAREN_KEYWORD)) {
       return false;
     }
