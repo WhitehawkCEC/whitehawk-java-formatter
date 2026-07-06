@@ -979,6 +979,11 @@ public final class Printer {
     if (sym == Sym.COLON && top.ternaryIndents != null && !top.ternaryIndents.isEmpty()) {
       return top.ternaryIndents.peek();
     }
+    // A broken `->` already pushed its body one level past the element start; logical operators in
+    // that body hang one level deeper still, under the operand rather than aligning with it.
+    if (top.arrowBodyBroken && isLogicalOp(firstToken)) {
+      return top.elementStartIndent + 2 * INDENT;
+    }
     return top.elementStartIndent + INDENT;
   }
 
@@ -1125,6 +1130,11 @@ public final class Printer {
         }
       }
       case COLON -> analyzeColon(stack, i, top);
+      case ARROW -> {
+        int next = indexOfNextCode(i);
+        top.arrowBodyBroken = next >= 0 && breakBefore[next];
+        afterContentToken(top, false);
+      }
       case PLUS, MINUS, INCREMENT, DECREMENT, BANG, TILDE -> {
         if (isUnaryPosition(i)) {
           mark(i, Mark.UNARY);
@@ -1242,6 +1252,7 @@ public final class Printer {
 
   private void resetElement(Scope scope) {
     scope.caseLabel = false;
+    scope.arrowBodyBroken = false;
     scope.sawSwitch = false;
     scope.sawEnum = false;
     scope.sawAssert = false;

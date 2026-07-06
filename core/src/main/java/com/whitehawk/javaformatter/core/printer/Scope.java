@@ -39,6 +39,9 @@ final class Scope {
   boolean sawEnum;
   boolean sawAssert;
   boolean caseLabel;
+  /// A broken `->` puts its body on its own continuation line, so logical operators within that
+  /// body hang one level deeper than the operand rather than aligning under it.
+  boolean arrowBodyBroken;
   int generic;
   /// Innermost open ternary first. Lazy — most scopes never hold one.
   @Nullable Deque<Integer> ternaryIndents;
@@ -62,6 +65,7 @@ final class Scope {
     sawEnum = false;
     sawAssert = false;
     caseLabel = false;
+    arrowBodyBroken = false;
     generic = 0;
     if (ternaryIndents != null) {
       ternaryIndents.clear();
