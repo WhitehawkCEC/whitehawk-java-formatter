@@ -503,6 +503,20 @@ public final class Printer {
         changed = true;
         continue;
       }
+      // A too-long method chain re-lays every `.call(` onto its own line rather than isolating the
+      // last call's argument, which would strand a single argument while leaving the chain crammed.
+      List<Integer> chain = topLevelChainDots(
+        line.firstToken(),
+        line.firstToken() + line.tokenCount() - 1
+      );
+      if (chain.size() >= 2 && !breakBefore[chain.get(0)]) {
+        for (int b : chain) {
+          breakBefore[b] = true;
+          forcedBreak[b] = true;
+        }
+        changed = true;
+        continue;
+      }
       int open = -1;
       int close = -1;
       int end = line.firstToken() + line.tokenCount();
