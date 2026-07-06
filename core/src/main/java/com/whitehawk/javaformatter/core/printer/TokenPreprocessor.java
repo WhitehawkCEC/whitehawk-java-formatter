@@ -20,17 +20,19 @@ final class TokenPreprocessor {
   private TokenPreprocessor() {}
 
   static List<Token> preprocess(List<Token> tokens) {
-    return parenthesizeSwitchOperands(
-      insertMissingBraces(
-        expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
+    return parenthesizeChainOperands(
+      parenthesizeSwitchOperands(
+        insertMissingBraces(
+          expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
+        )
       )
     );
   }
 
-  /// A `switch` combined with one of these reads as an operand and gets parenthesized; assignment,
-  /// `->`, and the ternary `?`/`:` are excluded so `x = switch`, `case y -> switch`, and
-  /// `c ? switch : ..` keep their bare form (as do `return`/`yield`, which aren't operators).
-  private static final Set<String> SWITCH_OPERAND_OPERATORS = Set.of(
+  /// An expression combined with one of these reads as an operand and gets parenthesized;
+  /// assignment, `->`, and the ternary `?`/`:` are excluded so `x = ..`, `case y -> ..`, and
+  /// `c ? .. : ..` keep their bare form (as do `return`/`yield`, which aren't operators).
+  private static final Set<String> BINARY_OPERAND_OPERATORS = Set.of(
     "||",
     "&&",
     "|",
@@ -80,13 +82,114 @@ final class TokenPreprocessor {
     return applyParenWraps(in, wraps);
   }
 
-  private static boolean isBinaryOperand(List<Token> in, int switchIndex, int bodyClose) {
-    int prev = prevCodeIndex(in, switchIndex);
-    if (prev >= 0 && SWITCH_OPERAND_OPERATORS.contains(in.get(prev).text())) {
+  private static boolean isBinaryOperand(List<Token> in, int start, int endInclusive) {
+    int prev = prevCodeIndex(in, start);
+    if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).text())) {
       return true;
     }
-    int next = nextCodeIndex(in, bodyClose);
-    return next >= 0 && SWITCH_OPERAND_OPERATORS.contains(in.get(next).text());
+    int next = nextCodeIndex(in, endInclusive);
+    return next >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(next).text());
+  }
+
+  /// Canonical style wraps a multiline method chain used as a binary operand in parens, so the
+  /// chain reads as a nested group indented under its own line instead of hanging off the operator.
+  /// A single-line chain (one that would not break anyway) keeps its bare form, as does a chain in a
+  /// non-operand position (`return`/`=`/`->`/ternary branch).
+  private static List<Token> parenthesizeChainOperands(List<Token> in) {
+    int n = in.size();
+    int[] close = matchAllBrackets(in);
+    int[] open = new int[n];
+    Arrays.fill(open, -1);
+    for (int i = 0; i < n; i++) {
+      if (close[i] >= 0) {
+        open[close[i]] = i;
+      }
+    }
+    boolean[] callDot = new boolean[n];
+    int[] nextCall = new int[n];
+    boolean[] linked = new boolean[n];
+    Arrays.fill(nextCall, -1);
+    for (int p = 0; p < n; p++) {
+      if (!isCallDot(in, close, p)) {
+        continue;
+      }
+      callDot[p] = true;
+      int paren = nextCodeIndex(in, nextCodeIndex(in, p));
+      int next = nextCodeIndex(in, close[paren]);
+      if (next >= 0 && isCallDot(in, close, next)) {
+        nextCall[p] = next;
+        linked[next] = true;
+      }
+    }
+    List<int[]> wraps = new ArrayList<>(); // {chainStart, chainCloseInclusive}
+    for (int p = 0; p < n; p++) {
+      if (!callDot[p] || linked[p]) {
+        continue; // not the head of a chain
+      }
+      int last = p;
+      int size = 0;
+      for (int c = p; c >= 0; c = nextCall[c]) {
+        last = c;
+        size++;
+      }
+      if (size < 2) {
+        continue;
+      }
+      int chainEnd = close[nextCodeIndex(in, nextCodeIndex(in, last))];
+      if (chainEnd < 0 || !spansLines(in, p, chainEnd)) {
+        continue; // a single-line chain would not break, so needs no parens
+      }
+      int chainStart = chainReceiverStart(in, open, p);
+      if (isBinaryOperand(in, chainStart, chainEnd)) {
+        wraps.add(new int[] { chainStart, chainEnd });
+      }
+    }
+    if (wraps.isEmpty()) {
+      return in;
+    }
+    return applyParenWraps(in, wraps);
+  }
+
+  private static boolean isCallDot(List<Token> in, int[] close, int p) {
+    if (!in.get(p).is(".")) {
+      return false;
+    }
+    int name = nextCodeIndex(in, p);
+    if (name < 0 || in.get(name).kind() != Kind.IDENT) {
+      return false;
+    }
+    int paren = nextCodeIndex(in, name);
+    return paren >= 0 && in.get(paren).is("(") && close[paren] >= 0;
+  }
+
+  /// Walks back from a chain's head `.call` over its receiver — a run of identifiers, `.`, and
+  /// matched bracket groups (`foo().bar`, `a.b[i].c`) — so the wrap encloses the whole operand.
+  private static int chainReceiverStart(List<Token> in, int[] open, int headDot) {
+    int start = headDot;
+    for (int r = prevCodeIndex(in, headDot); r >= 0; r = prevCodeIndex(in, r)) {
+      Token t = in.get(r);
+      if (t.is(")") || t.is("]")) {
+        if (open[r] < 0) {
+          break;
+        }
+        start = open[r];
+        r = open[r];
+      } else if (t.kind() == Kind.IDENT || t.is(".")) {
+        start = r;
+      } else {
+        break;
+      }
+    }
+    return start;
+  }
+
+  private static boolean spansLines(List<Token> in, int from, int toInclusive) {
+    for (int i = from + 1; i <= toInclusive; i++) {
+      if (in.get(i).newlinesBefore() > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static List<Token> applyParenWraps(List<Token> in, List<int[]> wraps) {
