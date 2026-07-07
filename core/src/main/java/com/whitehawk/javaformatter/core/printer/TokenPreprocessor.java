@@ -746,11 +746,19 @@ final class TokenPreprocessor {
     int[] openers = new int[n];
     int depth = 0;
     for (int i = 0; i < n; i++) {
-      Token t = in.get(i);
-      if (t.is("(") || t.is("[") || t.is("{")) {
-        openers[depth++] = i;
-      } else if ((t.is(")") || t.is("]") || t.is("}")) && depth > 0) {
-        mc[openers[--depth]] = i;
+      // Brackets are single-char, so a length gate skips the switch for every longer token.
+      String text = in.get(i).text();
+      if (text.length() != 1) {
+        continue;
+      }
+      switch (text.charAt(0)) {
+        case '(', '[', '{' -> openers[depth++] = i;
+        case ')', ']', '}' -> {
+          if (depth > 0) {
+            mc[openers[--depth]] = i;
+          }
+        }
+        default -> {}
       }
     }
     return mc;
