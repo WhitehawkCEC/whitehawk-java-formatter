@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.3.3](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.2...0.3.3) (2026-07-07)
+
+
+### Features
+
+* add `@NullMarked` ([6ee8606](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/6ee860624e4e605e0d75a79f25d256fdb64e9f65))
+* add `@NullMarked` ([8ce3603](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/8ce36033f7f3a9f6dc148ee95faaf7e109c3cddd))
+* **core:** align a comment before an arrow case with the label ([618f243](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/618f2438f759f16349b919e01d8b093d763d5e78))
+* **core:** break a single-line condition at its logical operators ([b20ab82](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/b20ab822a38b0990b00297996c98e82a67416beb))
+* **core:** break a too-long method chain instead of its last argument ([564bfee](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/564bfee6c3492f96f6846dbae5384840e513ae1e))
+* **core:** break and unwrap a chain whose first call has a type witness ([cbfffa8](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/cbfffa85afcdf7919beffc233f16079a55b02324))
+* **core:** break every logical operator when a mixed condition wraps ([6b5d98f](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/6b5d98f47a52ed67cbf5e3a6bddc24cddb73fbcf))
+* **core:** hang logical operators under a broken arrow-case body ([3c6ed36](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/3c6ed368fcff0dde7dfe558a7c74356942331cb5))
+* **core:** indent a comment before a case label as case body ([8a364db](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/8a364db6c3b8278cbc09c676c8836cce35fba330))
+* **core:** indent a parenthesized conditional's body an extra level ([e70cfd1](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/e70cfd13ec8d32963905b963c2d0500e5143edbe))
+* **core:** indent a wrapped switch body from its keyword column ([ea68255](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ea6825538830f0e415f0362a3842ea11ae9a2eff))
+* **core:** keep a cast paren on its line when wrapping ([bef1136](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/bef11366d7f33c56b3ca7fcd50a92015fe935ad6))
+* **core:** keep single indent for a parenthesized-conditional argument ([df6ff8c](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/df6ff8c0882d27e2bc6a73b2928d0227a364ac44))
+* **core:** keep single indent for a sole-argument parenthesized conditional ([e8eda7b](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/e8eda7b6a2d14523a62a07260547bd774860b6ae))
+* **core:** only parenthesize a chain that follows a binary operator ([e12470e](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/e12470e8719b1d700cbf3efe745d4c315ad0f31b))
+* **core:** parenthesize a multiline method chain used as a binary operand ([a588a51](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/a588a5170d2480b140fc34425833feea58356cc8))
+* **core:** parenthesize switch expression used as a binary operand ([d05debf](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/d05debfc529682f2b9046128fc23af0f6ccbec43))
+* **core:** seat a broken binary RHS's first operand on the assignment line ([97f32ad](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/97f32adb477e695bdeb97cf7c979d18bb9e63c74))
+* **core:** space adjacent annotations after `@Foo(..)` ([d206f44](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/d206f44306c33d9a04785d6140258c6160b41db2))
+* **core:** spread a concat break to every `+` of the chain ([214aab6](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/214aab61454db31788d94bcfe1ef186648ce084f))
+
 ## [0.3.2](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.1...0.3.2) (2026-07-04)
 
 
