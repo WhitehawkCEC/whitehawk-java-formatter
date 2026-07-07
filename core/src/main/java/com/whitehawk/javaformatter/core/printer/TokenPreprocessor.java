@@ -368,6 +368,29 @@ final class TokenPreprocessor {
       return in;
     }
 
+    // Only the simple name an import introduces can mark it used, so track membership against that
+    // small set rather than collecting every identifier in the file. A wildcard is always kept and
+    // contributes no trackable name.
+    String[] importName = new String[imports.size()];
+    Set<String> tracked = new HashSet<>();
+    for (int k = 0; k < imports.size(); k++) {
+      int[] range = imports.get(k);
+      if (in.get(range[1] - 1).is("*")) {
+        continue;
+      }
+      for (int i = range[1] - 1; i > range[0]; i--) {
+        Token t = in.get(i);
+        if (t.kind() == Kind.IDENT && !t.isKeyword()) {
+          importName[k] = t.text();
+          tracked.add(t.text());
+          break;
+        }
+      }
+    }
+    if (tracked.isEmpty()) {
+      return in; // only wildcard or nameless imports: nothing to drop
+    }
+
     Set<String> used = new HashSet<>();
     int imp = 0;
     for (int i = 0; i < n; i++) {
@@ -378,27 +401,20 @@ final class TokenPreprocessor {
       }
       Token t = in.get(i);
       if (t.kind() == Kind.IDENT) {
-        used.add(t.text());
+        if (tracked.contains(t.text())) {
+          used.add(t.text());
+        }
       } else if (t.isComment()) {
-        addIdentifierWords(used, t.text());
+        addTrackedWords(used, tracked, t.text());
       }
     }
 
     boolean[] drop = new boolean[n];
     boolean any = false;
-    for (int[] range : imports) {
-      if (in.get(range[1] - 1).is("*")) {
-        continue; // wildcard: keep
-      }
-      String name = null;
-      for (int i = range[1] - 1; i > range[0]; i--) {
-        Token t = in.get(i);
-        if (t.kind() == Kind.IDENT && !t.isKeyword()) {
-          name = t.text();
-          break;
-        }
-      }
+    for (int k = 0; k < imports.size(); k++) {
+      String name = importName[k];
       if (name != null && !used.contains(name)) {
+        int[] range = imports.get(k);
         for (int i = range[0]; i <= range[1]; i++) {
           drop[i] = true;
         }
@@ -426,7 +442,8 @@ final class TokenPreprocessor {
     return out;
   }
 
-  private static void addIdentifierWords(Set<String> used, String text) {
+  /// Marks used any identifier word in `text` (e.g. a javadoc `{@link Foo}`) that names an import.
+  private static void addTrackedWords(Set<String> used, Set<String> tracked, String text) {
     int len = text.length();
     for (int i = 0; i < len;) {
       if (Character.isJavaIdentifierStart(text.charAt(i))) {
@@ -434,7 +451,10 @@ final class TokenPreprocessor {
         while (j < len && Character.isJavaIdentifierPart(text.charAt(j))) {
           j++;
         }
-        used.add(text.substring(i, j));
+        String word = text.substring(i, j);
+        if (tracked.contains(word)) {
+          used.add(word);
+        }
         i = j;
       } else {
         i++;
