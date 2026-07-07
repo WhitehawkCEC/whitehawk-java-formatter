@@ -20,13 +20,30 @@ final class TokenPreprocessor {
   private TokenPreprocessor() {}
 
   static List<Token> preprocess(List<Token> tokens) {
-    return parenthesizeChainOperands(
-      parenthesizeSwitchOperands(
-        insertMissingBraces(
-          expandLambdaParams(removeUnusedImports(terminateEnumConstants(tokens)))
-        )
-      )
-    );
+    Brackets brackets = new Brackets();
+    List<Token> out = terminateEnumConstants(tokens, brackets);
+    out = removeUnusedImports(out);
+    out = expandLambdaParams(out);
+    out = insertMissingBraces(out, brackets);
+    out = parenthesizeSwitchOperands(out, brackets);
+    out = parenthesizeChainOperands(out, brackets);
+    return out;
+  }
+
+  /// Memoizes the last bracket-match pass on token-list identity. Stages run in sequence and each
+  /// either returns its input unchanged or a fresh list, so a stage that leaves the list alone lets
+  /// the next reuse the same O(n) scan instead of recomputing it.
+  private static final class Brackets {
+    private @Nullable List<Token> forList;
+    private int[] close = {};
+
+    int[] close(List<Token> in) {
+      if (forList != in) {
+        close = matchAllBrackets(in);
+        forList = in;
+      }
+      return close;
+    }
   }
 
   /// An expression combined with one of these reads as an operand and gets parenthesized;
@@ -56,9 +73,9 @@ final class TokenPreprocessor {
 
   /// Canonical style wraps a `switch` expression used as a binary operand in parens, so it reads as
   /// a nested group instead of running into the operators around it.
-  private static List<Token> parenthesizeSwitchOperands(List<Token> in) {
+  private static List<Token> parenthesizeSwitchOperands(List<Token> in, Brackets brackets) {
     int n = in.size();
-    int[] close = matchAllBrackets(in);
+    int[] close = brackets.close(in);
     List<int[]> wraps = new ArrayList<>(); // {switchIndex, bodyCloseInclusive}
     for (int i = 0; i < n; i++) {
       if (!in.get(i).is("switch")) {
@@ -97,9 +114,9 @@ final class TokenPreprocessor {
   /// starts on the statement's own line and reads fine bare. A single-line chain (one that would not
   /// break anyway) keeps its bare form, as does a chain in a non-operand position (`return`/`=`/`->`/
   /// ternary branch).
-  private static List<Token> parenthesizeChainOperands(List<Token> in) {
+  private static List<Token> parenthesizeChainOperands(List<Token> in, Brackets brackets) {
     int n = in.size();
-    int[] close = matchAllBrackets(in);
+    int[] close = brackets.close(in);
     int[] open = new int[n];
     Arrays.fill(open, -1);
     for (int i = 0; i < n; i++) {
@@ -260,9 +277,9 @@ final class TokenPreprocessor {
   /// list ending in a bare trailing comma (no `;`) gets the missing `;` appended; a list already
   /// terminated by `;` but lacking the trailing comma gets one inserted before the `;`. A bare
   /// constant (no comma, no `;`) is left untouched.
-  private static List<Token> terminateEnumConstants(List<Token> in) {
+  private static List<Token> terminateEnumConstants(List<Token> in, Brackets brackets) {
     int n = in.size();
-    int[] close = matchAllBrackets(in);
+    int[] close = brackets.close(in);
     Set<Integer> appendSemiAfter = new HashSet<>(); // append `;` after this comma
     Set<Integer> insertCommaBefore = new HashSet<>(); // insert `,` before this `;`
     for (int i = 0; i < n; i++) {
@@ -587,9 +604,9 @@ final class TokenPreprocessor {
   }
 
   /// Canonical style braces every control-flow body (`if`/`else`/`for`/`while`/`do`).
-  private static List<Token> insertMissingBraces(List<Token> in) {
+  private static List<Token> insertMissingBraces(List<Token> in, Brackets brackets) {
     int n = in.size();
-    int[] close = matchAllBrackets(in);
+    int[] close = brackets.close(in);
     List<int[]> wraps = new ArrayList<>(); // {bodyStart, bodyEndInclusive}
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
