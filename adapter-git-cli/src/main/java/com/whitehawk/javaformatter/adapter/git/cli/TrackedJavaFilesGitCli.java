@@ -92,8 +92,8 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
   /// Runs `git` to completion and returns its trimmed stdout, throwing on a non-zero exit.
   private static String run(Path cwd, String... args) {
     Process process = start(cwd, true, args);
-    try {
-      String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    try (InputStream stdout = process.getInputStream()) {
+      String output = new String(stdout.readAllBytes(), StandardCharsets.UTF_8);
       int exit = process.waitFor();
       if (exit != 0) {
         throw new UncheckedIOException(
@@ -115,8 +115,8 @@ public final class TrackedJavaFilesGitCli implements TrackedJavaFiles {
   /// Runs `git` to completion, discarding output, and reports whether it exited zero.
   private static boolean succeeds(Path cwd, String... args) {
     Process process = start(cwd, true, args);
-    try {
-      process.getInputStream().readAllBytes();
+    try (InputStream stdout = process.getInputStream()) {
+      stdout.readAllBytes();
       return process.waitFor() == 0;
     } catch (IOException e) {
       throw new UncheckedIOException("Cannot run git " + String.join(" ", args), e);
