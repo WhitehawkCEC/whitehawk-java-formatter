@@ -1773,18 +1773,15 @@ public final class Printer {
     if (nextSym == Sym.LBRACKET) {
       return false;
     }
-    if (prevSym == Sym.SEMI || prevSym == Sym.COMMA) {
-      return true;
-    }
-    if (
-      tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR)
-        || tokenClasses.has(nextIndex, Classification.BINARY_OPERATOR)
-    ) {
-      return true;
-    }
     boolean prevWord = prev.kind() != Kind.PUNCT;
     boolean nextWord = next.kind() != Kind.PUNCT;
-    if (prevWord && nextWord) {
+    if (
+      prevSym == Sym.SEMI
+        || prevSym == Sym.COMMA
+        || tokenClasses.has(prevIndex, Classification.BINARY_OPERATOR)
+        || tokenClasses.has(nextIndex, Classification.BINARY_OPERATOR)
+        || (prevWord && nextWord)
+    ) {
       return true;
     }
     if (nextSym == Sym.AT) {
