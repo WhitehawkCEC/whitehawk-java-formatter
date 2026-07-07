@@ -82,10 +82,10 @@ enum Classification {
         case ")", "]", "}" -> classes.set(i, CLOSER);
         default -> {}
       }
-    } else if (t.kind() == Kind.IDENT) {
-      if (t.isKeyword()) {
-        classes.set(i, KEYWORD);
-      }
+    } else if (t.kind() == Kind.IDENT && t.isKeyword()) {
+      // PRIMITIVE, MODIFIER, and PAREN_KEYWORD texts are all keywords, so a non-keyword identifier
+      // (the common case) matches none of them and skips their probes.
+      classes.set(i, KEYWORD);
       if (t.isPrimitive()) {
         classes.set(i, PRIMITIVE);
       }
