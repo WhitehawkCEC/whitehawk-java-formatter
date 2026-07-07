@@ -33,26 +33,17 @@ enum Classification {
     "assert",
     "yield"
   );
-  private static boolean isBinaryOperator(String text) {
-    return switch (text) {
-      case "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "==", "!=",
-        "&&", "||", "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=", ">=",
-        "?", ":", "->" -> true;
-      default -> false;
-    };
-  }
 
   /// Every classifying set entry is either identifier-shaped or an operator, so only the matching
   /// token kind is probed.
   static void classify(ArraySmallEnumSet<Classification> classes, int i, Token t) {
     if (t.kind() == Kind.PUNCT) {
-      if (isBinaryOperator(t.text())) {
-        classes.set(i, BINARY_OPERATOR);
-      }
       switch (t.text()) {
+        case "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "==", "!=",
+             "&&", "||", "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=",
+             ">=", "?", ":", "->" -> classes.set(i, BINARY_OPERATOR);
         case "(", "[", "{" -> classes.set(i, OPENER);
         case ")", "]", "}" -> classes.set(i, CLOSER);
-        default -> {}
       }
     } else if (t.kind() == Kind.IDENT && t.isKeyword()) {
       // PRIMITIVE, MODIFIER, and PAREN_KEYWORD texts are all keywords, so a non-keyword identifier
