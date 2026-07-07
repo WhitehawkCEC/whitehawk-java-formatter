@@ -1717,10 +1717,7 @@ public final class Printer {
     if (noSpaceBefore(nextSym) || noSpaceAfter(prevSym)) {
       return false;
     }
-    if (prevSym == Sym.ELLIPSIS) {
-      return true;
-    }
-    if (prevSym == Sym.ARROW || nextSym == Sym.ARROW) {
+    if (prevSym == Sym.ELLIPSIS || prevSym == Sym.ARROW || nextSym == Sym.ARROW) {
       return true;
     }
     if (marks.has(nextIndex, Mark.UNARY)) {
