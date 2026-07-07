@@ -1747,13 +1747,15 @@ public final class Printer {
     if (nextSym == Sym.COLON) {
       return !marks.has(nextIndex, Mark.COLON_NO_SPACE_BEFORE);
     }
-    if (prevSym == Sym.COLON) {
-      return true;
-    }
     if (prevSym == Sym.LBRACE && nextSym == Sym.RBRACE) {
       return false;
     }
-    if (nextSym == Sym.LBRACE || prevSym == Sym.LBRACE || nextSym == Sym.RBRACE) {
+    if (
+      prevSym == Sym.COLON
+        || nextSym == Sym.LBRACE
+        || prevSym == Sym.LBRACE
+        || nextSym == Sym.RBRACE
+    ) {
       return true;
     }
     if (prevSym == Sym.RBRACE) {
