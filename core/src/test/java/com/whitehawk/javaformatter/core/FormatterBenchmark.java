@@ -43,12 +43,12 @@ public class FormatterBenchmark {
       )
     );
     source = Files.readString(input);
-    tokens = new JavaLexer(source).stream().toList();
+    tokens = new JavaLexer(source).tokenize();
   }
 
   @Benchmark
   public List<Token> lex() {
-    return new JavaLexer(source).stream().toList();
+    return new JavaLexer(source).tokenize();
   }
 
   @Benchmark
