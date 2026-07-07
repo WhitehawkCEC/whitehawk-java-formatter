@@ -5,7 +5,8 @@ import com.whitehawk.javaformatter.core.Token;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Stream;
 
 /// Lexes Java source into a flat token stream, preserving comments and the number of line
@@ -32,7 +33,17 @@ public final class JavaLexer {
   }
 
   public Stream<Token> stream() {
-    return Stream.generate(this::next).takeWhile(Objects::nonNull);
+    return tokenize().stream();
+  }
+
+  /// Lexes the whole source into a list in one pass. The one consumer collects the tokens anyway,
+  /// so building the list directly avoids the per-token overhead of a [Stream] pipeline.
+  public List<Token> tokenize() {
+    List<Token> tokens = new ArrayList<>(Math.max(16, src.length() / 4));
+    for (Token t = next(); t != null; t = next()) {
+      tokens.add(t);
+    }
+    return tokens;
   }
 
   private @Nullable Token next() {
