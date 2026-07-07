@@ -39,10 +39,11 @@ public final class Main {
           path = Path.of(arg);
         }
       }
+      int threads = Runtime.getRuntime().availableProcessors();
+      long start = System.nanoTime();
+      int fileCount;
       try (
-        ExecutorService executor = Executors.newFixedThreadPool(
-          Runtime.getRuntime().availableProcessors()
-        );
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
         Stream<Path> files = changed
           ? trackedJavaFiles.changed(path)
           : trackedJavaFiles.list(path)
@@ -53,7 +54,15 @@ public final class Main {
         for (Future<Void> result : results) {
           result.get();
         }
+        fileCount = results.size();
       }
+      long millis = (System.nanoTime() - start) / 1_000_000;
+      System.out.printf(
+        "Finished in %dms on %d files using %d threads.%n",
+        millis,
+        fileCount,
+        threads
+      );
     }
 
     private Void format(Path file) throws IOException {
