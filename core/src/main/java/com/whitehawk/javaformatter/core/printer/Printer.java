@@ -1714,27 +1714,7 @@ public final class Printer {
     if (prev.isComment() || next.isComment()) {
       return true;
     }
-    if (nextSym == Sym.SEMI || nextSym == Sym.COMMA) {
-      return false;
-    }
-    if (prevSym == Sym.LPAREN || prevSym == Sym.LBRACKET) {
-      return false;
-    }
-    if (nextSym == Sym.RPAREN || nextSym == Sym.RBRACKET) {
-      return false;
-    }
-    if (
-      prevSym == Sym.DOT
-        || nextSym == Sym.DOT
-        || prevSym == Sym.METHOD_REF
-        || nextSym == Sym.METHOD_REF
-    ) {
-      return false;
-    }
-    if (prevSym == Sym.AT) {
-      return false;
-    }
-    if (nextSym == Sym.ELLIPSIS) {
+    if (noSpaceBefore(nextSym) || noSpaceAfter(prevSym)) {
       return false;
     }
     if (prevSym == Sym.ELLIPSIS) {
@@ -1835,5 +1815,19 @@ public final class Printer {
       return prevSym == Sym.PLUS || prevSym == Sym.MINUS;
     }
     return true;
+  }
+
+  private static boolean noSpaceBefore(Sym sym) {
+    return switch (sym) {
+      case SEMI, COMMA, RPAREN, RBRACKET, DOT, METHOD_REF, ELLIPSIS -> true;
+      default -> false;
+    };
+  }
+
+  private static boolean noSpaceAfter(Sym sym) {
+    return switch (sym) {
+      case LPAREN, LBRACKET, DOT, METHOD_REF, AT -> true;
+      default -> false;
+    };
   }
 }
