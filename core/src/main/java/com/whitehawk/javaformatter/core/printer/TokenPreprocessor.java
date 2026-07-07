@@ -228,11 +228,20 @@ final class TokenPreprocessor {
         if (--depth == 0) {
           return j;
         }
-      } else if (t.is("(") || t.is(")") || t.is("{") || t.is("}") || t.is(";") || t.is("=")) {
+      } else if (isTypeArgBoundary(t)) {
         return -1;
       }
     }
     return -1;
+  }
+
+  /// The brackets and separators a type-argument list never contains, so reaching one means the
+  /// `>` did not close a witness.
+  private static boolean isTypeArgBoundary(Token t) {
+    return switch (t.text()) {
+      case "(", ")", "{", "}", ";", "=" -> true;
+      default -> false;
+    };
   }
 
   private static boolean spansLines(List<Token> in, int from, int toInclusive) {
@@ -537,25 +546,20 @@ final class TokenPreprocessor {
       if (p.is("case")) {
         return false;
       }
-      boolean labelPart = p.is(".")
-        || p.is(",")
-        || p.is("<")
-        || p.is(">")
-        || p.is(">>")
-        || p.is(">>>")
-        || p.is("?")
-        || p.is("&")
-        || p.is("[")
-        || p.is("]")
-        || p.is("extends")
-        || p.is("super")
-        || p.kind() == Kind.IDENT
-        && !p.isKeyword();
-      if (!labelPart) {
+      if (!isLabelPart(p)) {
         break;
       }
     }
     return true;
+  }
+
+  /// A token that continues a lambda parameter's label/qualifier list: a bare name, or the
+  /// punctuation and keywords a generic or array type pattern can carry.
+  private static boolean isLabelPart(Token t) {
+    return switch (t.text()) {
+      case ".", ",", "<", ">", ">>", ">>>", "?", "&", "[", "]", "extends", "super" -> true;
+      default -> t.kind() == Kind.IDENT && !t.isKeyword();
+    };
   }
 
   private static @Nullable List<Integer> implicitParamIdents(List<Token> in, int open, int close) {
@@ -707,7 +711,7 @@ final class TokenPreprocessor {
     if (t.is(";")) {
       return start;
     }
-    if (t.is("if") || t.is("while") || t.is("for") || t.is("switch") || t.is("synchronized")) {
+    if (isParenControlFlow(t)) {
       int paren = nextCodeIndex(in, start);
       if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
         return scanToSemicolon(in, close, start);
@@ -745,6 +749,14 @@ final class TokenPreprocessor {
       return end;
     }
     return scanToSemicolon(in, close, start);
+  }
+
+  /// Control-flow keywords whose body follows a parenthesized clause (`if (..) ..`).
+  private static boolean isParenControlFlow(Token t) {
+    return switch (t.text()) {
+      case "if", "while", "for", "switch", "synchronized" -> true;
+      default -> false;
+    };
   }
 
   private static int scanToSemicolon(List<Token> in, int[] close, int from) {
