@@ -33,48 +33,20 @@ enum Classification {
     "assert",
     "yield"
   );
-  private static final Set<String> BINARY_OPERATORS = Set.of(
-    "=",
-    "+=",
-    "-=",
-    "*=",
-    "/=",
-    "%=",
-    "&=",
-    "|=",
-    "^=",
-    "<<=",
-    ">>=",
-    ">>>=",
-    "==",
-    "!=",
-    "&&",
-    "||",
-    "+",
-    "-",
-    "*",
-    "/",
-    "%",
-    "&",
-    "|",
-    "^",
-    "<<",
-    ">>",
-    ">>>",
-    "<",
-    ">",
-    "<=",
-    ">=",
-    "?",
-    ":",
-    "->"
-  );
+  private static boolean isBinaryOperator(String text) {
+    return switch (text) {
+      case "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "==", "!=",
+        "&&", "||", "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=", ">=",
+        "?", ":", "->" -> true;
+      default -> false;
+    };
+  }
 
   /// Every classifying set entry is either identifier-shaped or an operator, so only the matching
   /// token kind is probed.
   static void classify(ArraySmallEnumSet<Classification> classes, int i, Token t) {
     if (t.kind() == Kind.PUNCT) {
-      if (BINARY_OPERATORS.contains(t.text())) {
+      if (isBinaryOperator(t.text())) {
         classes.set(i, BINARY_OPERATOR);
       }
       switch (t.text()) {
