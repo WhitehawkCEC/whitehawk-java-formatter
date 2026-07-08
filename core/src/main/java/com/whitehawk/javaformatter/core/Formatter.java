@@ -2,6 +2,7 @@ package com.whitehawk.javaformatter.core;
 
 import com.whitehawk.javaformatter.core.lexer.JavaLexer;
 import com.whitehawk.javaformatter.core.printer.Printer;
+import com.whitehawk.javaformatter.core.printer.TokenContext;
 
 import jakarta.inject.Singleton;
 
@@ -17,6 +18,6 @@ public final class Formatter {
     if (tokens.isEmpty()) {
       return "";
     }
-    return new Printer(tokens).print();
+    return new Printer(TokenContext.from(tokens)).print();
   }
 }
