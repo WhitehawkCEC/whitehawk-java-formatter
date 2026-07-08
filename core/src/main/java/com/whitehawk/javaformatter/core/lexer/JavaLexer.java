@@ -58,7 +58,7 @@ public final class JavaLexer {
     newlines = 0;
     atLineStart = false;
     String text = kind == Kind.PUNCT ? punctText(start, pos) : src.substring(start, pos);
-    return new Token(kind, text, start, pos, newlinesBefore, column0);
+    return Token.of(kind, text, start, pos, newlinesBefore, column0);
   }
 
   /// Shared text of the punctuation token `start..end`, avoiding a string allocation per
