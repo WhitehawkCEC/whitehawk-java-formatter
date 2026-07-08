@@ -269,14 +269,14 @@ final class TokenPreprocessor {
         // multiline body then isolates the `(`/`)` under the printer's usual bracket layout.
         for (int k = 0; k < opensBefore[i]; k++) {
           out.add(
-            new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+            Token.of(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
           );
         }
-        t = new Token(t.kind(), t.text(), t.start(), t.end(), 0, false);
+        t = Token.of(t.kind(), t.text(), t.start(), t.end(), 0, false);
       }
       out.add(t);
       for (int k = 0; k < closesAfter[i]; k++) {
-        out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
+        out.add(Token.of(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
       }
     }
     return out;
@@ -322,12 +322,12 @@ final class TokenPreprocessor {
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
       if (insertCommaBefore.contains(i)) {
-        out.add(new Token(Kind.PUNCT, ",", t.start(), t.start(), 0, false));
-        t = new Token(t.kind(), t.text(), t.start(), t.end(), 1, false);
+        out.add(Token.of(Kind.PUNCT, ",", t.start(), t.start(), 0, false));
+        t = Token.of(t.kind(), t.text(), t.start(), t.end(), 1, false);
       }
       out.add(t);
       if (appendSemiAfter.contains(i)) {
-        out.add(new Token(Kind.PUNCT, ";", t.end(), t.end(), 1, false));
+        out.add(Token.of(Kind.PUNCT, ";", t.end(), t.end(), 1, false));
       }
     }
     return out;
@@ -443,7 +443,7 @@ final class TokenPreprocessor {
       }
       Token t = in.get(i);
       if (carriedNewlines > t.newlinesBefore()) {
-        t = new Token(t.kind(), t.text(), t.start(), t.end(), carriedNewlines, t.atColumn0());
+        t = Token.of(t.kind(), t.text(), t.start(), t.end(), carriedNewlines, t.atColumn0());
       }
       carriedNewlines = -1;
       out.add(t);
@@ -512,16 +512,16 @@ final class TokenPreprocessor {
       Token t = in.get(i);
       if (wrap[i]) {
         out.add(
-          new Token(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+          Token.of(Kind.PUNCT, "(", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
         );
-        out.add(new Token(Kind.IDENT, "var", t.start(), t.start(), 0, false));
-        out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
-        out.add(new Token(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
+        out.add(Token.of(Kind.IDENT, "var", t.start(), t.start(), 0, false));
+        out.add(Token.of(t.kind(), t.text(), t.start(), t.end(), 0, false));
+        out.add(Token.of(Kind.PUNCT, ")", t.end(), t.end(), 0, false));
       } else if (prefixVar[i]) {
         out.add(
-          new Token(Kind.IDENT, "var", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
+          Token.of(Kind.IDENT, "var", t.start(), t.start(), t.newlinesBefore(), t.atColumn0())
         );
-        out.add(new Token(t.kind(), t.text(), t.start(), t.end(), 0, false));
+        out.add(Token.of(t.kind(), t.text(), t.start(), t.end(), 0, false));
       } else {
         out.add(t);
       }
@@ -683,10 +683,10 @@ final class TokenPreprocessor {
       Token t = in.get(i);
       if (opensAt[i] > 0) {
         for (int k = 0; k < opensAt[i]; k++) {
-          out.add(new Token(Kind.PUNCT, "{", t.start(), t.start(), 0, false));
+          out.add(Token.of(Kind.PUNCT, "{", t.start(), t.start(), 0, false));
         }
         // The controlled statement starts its own line so the block spans multiple lines.
-        t = new Token(
+        t = Token.of(
           t.kind(),
           t.text(),
           t.start(),
@@ -697,7 +697,7 @@ final class TokenPreprocessor {
       }
       out.add(t);
       for (int k = 0; k < closesAt[i]; k++) {
-        out.add(new Token(Kind.PUNCT, "}", t.end(), t.end(), 1, false));
+        out.add(Token.of(Kind.PUNCT, "}", t.end(), t.end(), 1, false));
       }
     }
     return out;
