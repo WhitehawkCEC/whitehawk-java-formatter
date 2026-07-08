@@ -18,7 +18,7 @@ import java.util.List;
 /// The attributes and the code that fills them are kept apart: [Builder] does all the work and this
 /// type is an immutable holder whose constructor only copies the finished arrays. Build [#from].
 @NullMarked
-final class TokenContext {
+public final class TokenContext {
   private static final int TYPE_ARG_SCAN_LIMIT = 500;
 
   final List<Token> tokens;
@@ -58,8 +58,10 @@ final class TokenContext {
     this.prefixMultiline = b.prefixMultiline;
   }
 
-  static TokenContext from(List<Token> tokens) {
-    return new TokenContext(new Builder(tokens).build());
+  /// Preprocesses the raw stream into canonical form, then derives the metadata over it; the
+  /// resulting [#tokens] are the normalized tokens the printer renders.
+  public static TokenContext from(List<Token> tokens) {
+    return new TokenContext(new Builder(TokenPreprocessor.preprocess(tokens)).build());
   }
 
   // --- queries: read-only structural lookups the layout passes reuse ---

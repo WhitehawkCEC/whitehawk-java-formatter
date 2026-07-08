@@ -24,9 +24,9 @@ public final class Printer {
 
   private record Line(int firstToken, int tokenCount, int blanksBefore) {}
 
-  private final List<Token> tokens;
-  /// Per-token facts derived once from the stream and invariant thereafter (syms, classes, bracket
-  /// matches, code-neighbour indices, call chains); accessed as `ctx.field[i]`.
+  /// The normalized token stream and the per-token facts derived from it (syms, classes, bracket
+  /// matches, code-neighbour indices, call chains), invariant after construction; the token list is
+  /// reached as `ctx.tokens` and the metadata as `ctx.field[i]`.
   private final TokenContext ctx;
   private final List<Line> lines = new ArrayList<>();
   private final ArraySmallEnumSet<Mark> marks;
@@ -53,9 +53,12 @@ public final class Printer {
   private final List<Integer> pendingComments = new ArrayList<>();
 
   public Printer(List<Token> tokens) {
-    this.tokens = TokenPreprocessor.preprocess(tokens);
-    this.ctx = TokenContext.from(this.tokens);
-    int n = this.tokens.size();
+    this(TokenContext.from(tokens));
+  }
+
+  public Printer(TokenContext ctx) {
+    this.ctx = ctx;
+    int n = ctx.tokens.size();
     this.marks = new ArraySmallEnumSet<>(Mark.class, n);
     this.breakBefore = new boolean[n];
     this.forcedBreak = new boolean[n];
@@ -79,10 +82,10 @@ public final class Printer {
   }
 
   private void computeBreaks() {
-    int n = tokens.size();
+    int n = ctx.tokens.size();
     int line = 0;
     for (int i = 0; i < n; i++) {
-      if (i > 0 && tokens.get(i).newlinesBefore() > 0) {
+      if (i > 0 && ctx.tokens.get(i).newlinesBefore() > 0) {
         line++;
         breakBefore[i] = true;
       }
@@ -118,14 +121,14 @@ public final class Printer {
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
     // preceding token is a line comment, which would otherwise swallow the rest of the line.
     for (int i = 1; i < n; i++) {
-      if (ctx.tokenSym[i] == Sym.THROWS && tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
+      if (ctx.tokenSym[i] == Sym.THROWS && ctx.tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
         breakBefore[i] = false;
       }
     }
   }
 
   private void forceChainBreaks() {
-    int n = tokens.size();
+    int n = ctx.tokens.size();
     int[] nextCall = new int[n];
     boolean[] linked = new boolean[n];
     Arrays.fill(nextCall, -1);
@@ -169,8 +172,8 @@ public final class Printer {
   private void forceConcatBreaks() {
     // An operator reached by an earlier operator's spread needs no scan of its own: the spread
     // already covered every `+` of the chain.
-    boolean[] spread = new boolean[tokens.size()];
-    for (int i = 0; i < tokens.size(); i++) {
+    boolean[] spread = new boolean[ctx.tokens.size()];
+    for (int i = 0; i < ctx.tokens.size(); i++) {
       if (!breakBefore[i] || spread[i] || !isStringConcatPlus(i)) {
         continue;
       }
@@ -185,7 +188,7 @@ public final class Printer {
           forcedBreak[j] = true;
         }
       }
-      for (int j = i + 1; j < tokens.size(); j++) {
+      for (int j = i + 1; j < ctx.tokens.size(); j++) {
         if (ctx.tokenClasses.has(j, Classification.OPENER) && ctx.matchClose[j] >= 0) {
           j = ctx.matchClose[j];
         } else if (endsOperatorElement(j)) {
@@ -217,8 +220,8 @@ public final class Printer {
   private void forceLogicalBreaks() {
     // An operator reached by an earlier operator's spread needs no scan of its own: the spread
     // already covered every logical operator of the element.
-    boolean[] spread = new boolean[tokens.size()];
-    for (int i = 0; i < tokens.size(); i++) {
+    boolean[] spread = new boolean[ctx.tokens.size()];
+    for (int i = 0; i < ctx.tokens.size(); i++) {
       if (!breakBefore[i] || spread[i] || !isLogicalOp(i)) {
         continue;
       }
@@ -233,7 +236,7 @@ public final class Printer {
           forcedBreak[j] = true;
         }
       }
-      for (int j = i + 1; j < tokens.size(); j++) {
+      for (int j = i + 1; j < ctx.tokens.size(); j++) {
         if (ctx.tokenClasses.has(j, Classification.OPENER) && ctx.matchClose[j] >= 0) {
           j = ctx.matchClose[j];
         } else if (endsOperatorElement(j)) {
@@ -256,7 +259,7 @@ public final class Printer {
   /// while its neighbours wrap. Constant bodies and the methods after the list-terminating `;` are
   /// untouched.
   private void forceEnumConstantBreaks() {
-    int n = tokens.size();
+    int n = ctx.tokens.size();
     for (int e = 0; e < n; e++) {
       if (ctx.tokenSym[e] != Sym.ENUM) {
         continue;
@@ -307,7 +310,7 @@ public final class Printer {
   /// not the argument list of an annotation on that constant.
   private boolean isEnumConstantParen(int open) {
     int name = ctx.indexOfPrevCode(open);
-    if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+    if (name < 0 || ctx.tokens.get(name).kind() != Kind.IDENT) {
       return false;
     }
     return ctx.matchClose[open] >= 0 && !ctx.closesAnnotation(ctx.matchClose[open]);
@@ -319,7 +322,7 @@ public final class Printer {
   /// wrap. Block arms keep `-> {` on the label line; colon-style arms are untouched.
   private boolean forceSwitchArrowBreaks() {
     boolean changed = false;
-    int n = tokens.size();
+    int n = ctx.tokens.size();
     for (int s = 0; s < n; s++) {
       if (ctx.tokenSym[s] != Sym.SWITCH) {
         continue;
@@ -447,9 +450,9 @@ public final class Printer {
 
   private void buildLines() {
     int lineStart = 0;
-    for (int i = 1; i <= tokens.size(); i++) {
-      if (i == tokens.size() || breakBefore[i]) {
-        int nb = lineStart == 0 ? 0 : tokens.get(lineStart).newlinesBefore();
+    for (int i = 1; i <= ctx.tokens.size(); i++) {
+      if (i == ctx.tokens.size() || breakBefore[i]) {
+        int nb = lineStart == 0 ? 0 : ctx.tokens.get(lineStart).newlinesBefore();
         lines.add(new Line(lineStart, i - lineStart, nb > 1 ? nb - 1 : 0));
         lineStart = i;
       }
@@ -505,7 +508,7 @@ public final class Printer {
     // the comma's enclosing paren: a running depth replaces a per-comma rescan.
     int generic = 0;
     int depth = 0;
-    for (int i = 0; i < tokens.size(); i++) {
+    for (int i = 0; i < ctx.tokens.size(); i++) {
       if (marks.has(i, Mark.GENERIC_ANGLE)) {
         generic += ctx.angleDepthDelta(i);
         continue;
@@ -520,10 +523,10 @@ public final class Printer {
           // The break starts the next element, but a trailing comment on the comma's line stays
           // put: skip past it so the comment is not pushed onto its own line.
           int target = i + 1;
-          while (target < tokens.size() && tokens.get(target).isComment() && !breakBefore[target]) {
+          while (target < ctx.tokens.size() && ctx.tokens.get(target).isComment() && !breakBefore[target]) {
             target++;
           }
-          if (target < tokens.size() && !breakBefore[target]) {
+          if (target < ctx.tokens.size() && !breakBefore[target]) {
             breakBefore[target] = true;
             forcedBreak[target] = true;
             changed = true;
@@ -620,7 +623,7 @@ public final class Printer {
   /// structure (ternary, call chain) instead, or rejoins the assignment when it fits.
   private boolean moveAssignmentBreaks() {
     boolean changed = false;
-    for (int i = 1; i < tokens.size(); i++) {
+    for (int i = 1; i < ctx.tokens.size(); i++) {
       if (!breakBefore[i] || forcedBreak[i] || ctx.tokenSym[i - 1] != Sym.ASSIGN) {
         continue;
       }
@@ -660,7 +663,7 @@ public final class Printer {
   private int rhsEnd(int i) {
     int depth = 0;
     int generic = 0;
-    for (int j = i; j < tokens.size(); j++) {
+    for (int j = i; j < ctx.tokens.size(); j++) {
       Sym sym = ctx.tokenSym[j];
       if (
         depth == 0
@@ -680,7 +683,7 @@ public final class Printer {
         depth--;
       }
     }
-    return tokens.size() - 1;
+    return ctx.tokens.size() - 1;
   }
 
   /// The right-hand side starting at `i` keeps its head on one line and takes its first break at a
@@ -689,7 +692,7 @@ public final class Printer {
   private boolean rhsBreaksAtOperator(int i) {
     int depth = 0;
     int generic = 0;
-    for (int j = i; j < tokens.size(); j++) {
+    for (int j = i; j < ctx.tokens.size(); j++) {
       Sym sym = ctx.tokenSym[j];
       if (
         depth == 0
@@ -725,7 +728,7 @@ public final class Printer {
     if (prev == null || !endsOperand(prev)) {
       return false;
     }
-    return switch (tokens.get(j).text()) {
+    return switch (ctx.tokens.get(j).text()) {
       case "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=", ">=", "==",
           "!=", "&&", "||", "instanceof" -> true;
       default -> false;
@@ -737,7 +740,7 @@ public final class Printer {
   /// keep the single content indent.
   private boolean wrapsConditional(int open, int prev) {
     if (prev < 0
-      || endsOperand(tokens.get(prev))
+      || endsOperand(ctx.tokens.get(prev))
       || ctx.tokenSym[prev] == Sym.COMMA
       || ctx.tokenSym[prev] == Sym.LPAREN
       || ctx.tokenClasses.has(prev, Classification.PAREN_KEYWORD)) {
@@ -846,7 +849,7 @@ public final class Printer {
   private boolean collapseChainCallArguments() {
     boolean changed = false;
     boolean[] multiArg = null;
-    for (int dot = 0; dot < tokens.size(); dot++) {
+    for (int dot = 0; dot < ctx.tokens.size(); dot++) {
       if (!breakBefore[dot] || !ctx.isCallDot(dot)) {
         continue; // only a call that chain-breaking put on its own line
       }
@@ -896,10 +899,10 @@ public final class Printer {
   /// One pass attributing each comma to its innermost opener, versus a rescan per collapse
   /// candidate.
   private boolean[] computeMultiArgParens() {
-    boolean[] multiArg = new boolean[tokens.size()];
+    boolean[] multiArg = new boolean[ctx.tokens.size()];
     int generic = 0;
     int depth = 0;
-    for (int i = 0; i < tokens.size(); i++) {
+    for (int i = 0; i < ctx.tokens.size(); i++) {
       if (marks.has(i, Mark.GENERIC_ANGLE)) {
         generic += ctx.angleDepthDelta(i);
         continue;
@@ -941,7 +944,7 @@ public final class Printer {
   /// fits on one line — an unwind a soft join cannot do because it never crosses a forced break.
   private boolean collapseControlFlowHeaders() {
     boolean changed = false;
-    for (int open = 0; open < tokens.size(); open++) {
+    for (int open = 0; open < ctx.tokens.size(); open++) {
       if (ctx.tokenSym[open] != Sym.LPAREN || !breakBefore[open + 1]) {
         continue; // not an isolated paren
       }
@@ -1083,21 +1086,21 @@ public final class Printer {
         bodyIndent += INDENT;
       }
       for (int ci : pendingComments) {
-        lineIndent[ci] = tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
+        lineIndent[ci] = ctx.tokens.get(lines.get(ci).firstToken()).atColumn0() ? 0 : bodyIndent;
       }
       pendingComments.clear();
       walkLine(stack, line, indent, continuation);
     }
     for (int ci : pendingComments) {
-      lineIndent[ci] = tokens
+      lineIndent[ci] = ctx.tokens
         .get(lines.get(ci).firstToken())
         .atColumn0() ? 0 : stack.peek().contentIndent;
     }
     if (consumeMarksChanged()) {
-      for (int i = 1; i < tokens.size(); i++) {
+      for (int i = 1; i < ctx.tokens.size(); i++) {
         spaceBefore[i] = spaceBetween(i - 1, i);
       }
-      for (int i = 0; i < tokens.size(); i++) {
+      for (int i = 0; i < ctx.tokens.size(); i++) {
         prefixWidth[i + 1] = prefixWidth[i] + (spaceBefore[i] ? 1 : 0) + Math.max(ctx.tokenWidth[i], 0);
       }
     }
@@ -1133,7 +1136,7 @@ public final class Printer {
 
   private boolean isCommentOnly(Line line) {
     for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-      if (!tokens.get(i).isComment()) {
+      if (!ctx.tokens.get(i).isComment()) {
         return false;
       }
     }
@@ -1161,7 +1164,7 @@ public final class Printer {
 
   private void walkLine(Deque<Scope> stack, Line line, int indent, boolean continuation) {
     for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-      Token t = tokens.get(i);
+      Token t = ctx.tokens.get(i);
       if (t.isComment()) {
         continue;
       }
@@ -1183,7 +1186,7 @@ public final class Printer {
   }
 
   private void analyzeToken(Deque<Scope> stack, int i, int indent, int column) {
-    Token t = tokens.get(i);
+    Token t = ctx.tokens.get(i);
     Scope top = stack.peek();
     Sym sym = ctx.tokenSym[i];
     updateAnnotationState(top, t, sym);
@@ -1406,7 +1409,7 @@ public final class Printer {
   private void endOfLine(Deque<Scope> stack, Line line) {
     int last = -1;
     for (int i = line.firstToken() + line.tokenCount() - 1; i >= line.firstToken(); i--) {
-      if (!tokens.get(i).isComment()) {
+      if (!ctx.tokens.get(i).isComment()) {
         last = i;
         break;
       }
@@ -1429,7 +1432,7 @@ public final class Printer {
     int beforeOpen = ctx.indexOfPrevCode(ctx.matchOpen[closeIndex]);
     // A cast's `(` cannot follow a name or a closing bracket (that would be a call or index).
     if (beforeOpen >= 0) {
-      Token before = tokens.get(beforeOpen);
+      Token before = ctx.tokens.get(beforeOpen);
       if (
         before.kind() == Kind.IDENT
           && !ctx.tokenClasses.has(beforeOpen, Classification.KEYWORD)
@@ -1443,7 +1446,7 @@ public final class Printer {
     if (nextIndex < 0) {
       return false;
     }
-    Token next = tokens.get(nextIndex);
+    Token next = ctx.tokens.get(nextIndex);
     return switch (ctx.tokenSym[nextIndex]) {
       case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
@@ -1458,7 +1461,7 @@ public final class Printer {
     if (prevIndex < 0) {
       return true;
     }
-    Token prev = tokens.get(prevIndex);
+    Token prev = ctx.tokens.get(prevIndex);
     if (isLiteral(prev)) {
       return false;
     }
@@ -1492,7 +1495,7 @@ public final class Printer {
         PUBLIC, PRIVATE, PROTECTED, STATIC, FINAL, DEFAULT, ABSTRACT, CLASS, INTERFACE, RECORD,
         SEMI, RBRACE -> true;
       default -> {
-        Token prev = tokens.get(prevIndex);
+        Token prev = ctx.tokens.get(prevIndex);
         yield prev.kind() == Kind.IDENT && !prev.isKeyword();
       }
     };
@@ -1507,7 +1510,7 @@ public final class Printer {
     if (followerIndex < 0) {
       return end;
     }
-    boolean plausibleFollower = tokens.get(followerIndex).kind() == Kind.IDENT
+    boolean plausibleFollower = ctx.tokens.get(followerIndex).kind() == Kind.IDENT
       || switch (ctx.tokenSym[followerIndex]) {
            case LPAREN, RPAREN, COMMA, DOT, METHOD_REF, SEMI, LBRACKET, LBRACE, GT, GT_GT, GT_GT_GT,
              ELLIPSIS, AMP, ARROW, ASSIGN, AT -> true;
@@ -1593,7 +1596,7 @@ public final class Printer {
     int prevLastIndex = prev.firstToken() + prev.tokenCount() - 1;
     Sym prevLast = ctx.tokenSym[prevLastIndex];
     if (
-      tokens.get(prevLastIndex).isComment()
+      ctx.tokens.get(prevLastIndex).isComment()
         || prevLast == Sym.SEMI
         || prevLast == Sym.LBRACE
         || prevLast == Sym.RBRACE
@@ -1639,7 +1642,7 @@ public final class Printer {
 
   private String emit(boolean[] joinWithPrev) {
     // The last token's end offset approximates the source length, and the output stays close.
-    int capacity = tokens.isEmpty() ? 1 : tokens.get(tokens.size() - 1).end() + 1;
+    int capacity = ctx.tokens.isEmpty() ? 1 : ctx.tokens.get(ctx.tokens.size() - 1).end() + 1;
     StringBuilder out = new StringBuilder(capacity);
     for (int li = 0; li < lines.size(); li++) {
       Line line = lines.get(li);
@@ -1678,7 +1681,7 @@ public final class Printer {
   }
 
   private void appendToken(StringBuilder out, int i, int indent) {
-    Token t = tokens.get(i);
+    Token t = ctx.tokens.get(i);
     if (t.kind() == Kind.LINE_COMMENT) {
       out.append(t.text().stripTrailing());
       return;
@@ -1708,8 +1711,8 @@ public final class Printer {
   }
 
   private boolean spaceBetween(int prevIndex, int nextIndex) {
-    Token prev = tokens.get(prevIndex);
-    Token next = tokens.get(nextIndex);
+    Token prev = ctx.tokens.get(prevIndex);
+    Token next = ctx.tokens.get(nextIndex);
     Sym prevSym = ctx.tokenSym[prevIndex];
     Sym nextSym = ctx.tokenSym[nextIndex];
 
