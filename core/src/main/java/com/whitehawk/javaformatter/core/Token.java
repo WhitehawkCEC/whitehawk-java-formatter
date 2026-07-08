@@ -31,17 +31,17 @@ public record Token(
     Sym.DOUBLE,
     Sym.VOID
   );
-  private static final Set<String> MODIFIERS = Set.of(
-    "public",
-    "private",
-    "protected",
-    "static",
-    "final",
-    "default",
-    "abstract",
-    "synchronized",
-    "native",
-    "strictfp"
+  private static final Set<Sym> MODIFIERS = EnumSet.of(
+    Sym.PUBLIC,
+    Sym.PRIVATE,
+    Sym.PROTECTED,
+    Sym.STATIC,
+    Sym.FINAL,
+    Sym.DEFAULT,
+    Sym.ABSTRACT,
+    Sym.SYNCHRONIZED,
+    Sym.NATIVE,
+    Sym.STRICTFP
   );
 
   /// Reserved words plus literals and contextual keywords that formatting logic (or renaming
@@ -143,6 +143,6 @@ public record Token(
 
   /// The text is a modifier keyword that can open a declaration (`public`, `static`, ...).
   public boolean isModifier() {
-    return MODIFIERS.contains(text);
+    return MODIFIERS.contains(sym);
   }
 }
