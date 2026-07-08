@@ -2,6 +2,7 @@ package com.whitehawk.javaformatter.core;
 
 import org.jspecify.annotations.NullMarked;
 
+import java.util.EnumSet;
 import java.util.Set;
 
 /// @param start          offset of the first character in the source
@@ -19,16 +20,16 @@ public record Token(
   boolean atColumn0,
   Sym sym
 ) {
-  private static final Set<String> PRIMITIVES = Set.of(
-    "boolean",
-    "byte",
-    "char",
-    "short",
-    "int",
-    "long",
-    "float",
-    "double",
-    "void"
+  private static final Set<Sym> PRIMITIVES = EnumSet.of(
+    Sym.BOOLEAN,
+    Sym.BYTE,
+    Sym.CHAR,
+    Sym.SHORT,
+    Sym.INT,
+    Sym.LONG,
+    Sym.FLOAT,
+    Sym.DOUBLE,
+    Sym.VOID
   );
   private static final Set<String> MODIFIERS = Set.of(
     "public",
@@ -137,7 +138,7 @@ public record Token(
 
   /// The text is a primitive type keyword, including `void`.
   public boolean isPrimitive() {
-    return PRIMITIVES.contains(text);
+    return PRIMITIVES.contains(sym);
   }
 
   /// The text is a modifier keyword that can open a declaration (`public`, `static`, ...).
