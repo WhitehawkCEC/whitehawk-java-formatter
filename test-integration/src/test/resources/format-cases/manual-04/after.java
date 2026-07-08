@@ -12,7 +12,8 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 public class Dynamodb {
   static AttributeValue toAttributeValue(@Nullable Object value) {
     return switch (value) {
-      case null -> AttributeValue.fromNul(true);
+      case null ->
+        AttributeValue.fromNul(true);
       case Map<?, ?> map -> {
         Map<String, AttributeValue> converted = new LinkedHashMap<>();
         map.forEach((var key, var child) -> converted.put((String) key, toAttributeValue(child)));
@@ -23,10 +24,14 @@ public class Dynamodb {
         list.forEach((var child) -> converted.add(toAttributeValue(child)));
         yield AttributeValue.fromL(converted);
       }
-      case String string -> AttributeValue.fromS(string);
-      case Boolean bool -> AttributeValue.fromBool(bool);
-      case Number number -> AttributeValue.fromN(number.toString());
-      default -> throw new IllegalStateException("Unexpected value: " + value);
+      case String string ->
+        AttributeValue.fromS(string);
+      case Boolean bool ->
+        AttributeValue.fromBool(bool);
+      case Number number ->
+        AttributeValue.fromN(number.toString());
+      default ->
+        throw new IllegalStateException("Unexpected value: " + value);
     };
   }
 }

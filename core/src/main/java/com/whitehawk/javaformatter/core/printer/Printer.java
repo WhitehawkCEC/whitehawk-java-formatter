@@ -410,6 +410,110 @@ public final class Printer {
     return matchClose[open] >= 0 && !closesAnnotation(matchClose[open]);
   }
 
+  /// Arrow-style `case`/`default` arms of a switch are siblings: once any arm's body spans more than
+  /// one line — a block, or an expression that had to wrap — every other arrow arm breaks after its
+  /// `->` too, so a switch never leaves one arm crammed onto its label line while its neighbours
+  /// wrap. Block arms keep `-> {` on the label line; colon-style arms are untouched.
+  private boolean forceSwitchArrowBreaks() {
+    boolean changed = false;
+    int n = tokens.size();
+    for (int s = 0; s < n; s++) {
+      if (tokenSym[s] != Sym.SWITCH) {
+        continue;
+      }
+      int lparen = indexOfNextCode(s);
+      if (lparen < 0 || tokenSym[lparen] != Sym.LPAREN || matchClose[lparen] < 0) {
+        continue;
+      }
+      int bodyOpen = indexOfNextCode(matchClose[lparen]);
+      if (bodyOpen < 0 || tokenSym[bodyOpen] != Sym.LBRACE || matchClose[bodyOpen] < 0) {
+        continue;
+      }
+      int bodyClose = matchClose[bodyOpen];
+      List<Integer> arrowBodies = new ArrayList<>(); // body start of each non-block arrow arm
+      boolean anyMultiline = false;
+      int i = bodyOpen + 1;
+      while (i < bodyClose) {
+        if (tokenSym[i] != Sym.CASE && tokenSym[i] != Sym.DEFAULT) {
+          i = tokenClasses.has(i, Classification.OPENER) && matchClose[i] >= 0
+            ? matchClose[i] + 1
+            : i + 1;
+          continue;
+        }
+        int arrow = arrowOfCaseLabel(i, bodyClose);
+        if (arrow < 0) {
+          i++; // a colon-style label; its fallthrough statements are ordinary tokens
+          continue;
+        }
+        int body = indexOfNextCode(arrow);
+        if (body < 0 || body >= bodyClose) {
+          break;
+        }
+        int end;
+        if (tokenSym[body] == Sym.LBRACE && matchClose[body] >= 0) {
+          end = matchClose[body]; // block arm: its `-> {` never breaks
+        } else {
+          end = armExpressionEnd(body, bodyClose);
+          arrowBodies.add(body);
+        }
+        for (int k = body; k <= end; k++) {
+          if (breakBefore[k]) {
+            anyMultiline = true;
+            break;
+          }
+        }
+        i = end + 1;
+      }
+      if (!anyMultiline) {
+        continue;
+      }
+      for (int body : arrowBodies) {
+        if (!breakBefore[body] || !forcedBreak[body]) {
+          breakBefore[body] = true;
+          forcedBreak[body] = true;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /// The `->` of an arrow-style case label, or -1 when the label is colon-style (or malformed).
+  /// Nested bracket groups are skipped whole so a `,` inside a type pattern is not mistaken for the
+  /// label's end.
+  private int arrowOfCaseLabel(int label, int limit) {
+    for (int j = label + 1; j < limit; j++) {
+      if (tokenClasses.has(j, Classification.OPENER) && matchClose[j] >= 0) {
+        j = matchClose[j];
+        continue;
+      }
+      switch (tokenSym[j]) {
+        case ARROW -> {
+          return j;
+        }
+        case COLON, CASE, DEFAULT, SEMI -> {
+          return -1;
+        }
+        default -> {}
+      }
+    }
+    return -1;
+  }
+
+  /// The terminating `;` of an arrow arm's expression or statement body, skipping nested groups.
+  private int armExpressionEnd(int body, int limit) {
+    for (int j = body; j < limit; j++) {
+      if (tokenClasses.has(j, Classification.OPENER) && matchClose[j] >= 0) {
+        j = matchClose[j];
+        continue;
+      }
+      if (tokenSym[j] == Sym.SEMI) {
+        return j;
+      }
+    }
+    return limit - 1;
+  }
+
   private boolean endsOperatorElement(int i) {
     return tokenClasses.has(i, Classification.OPENER)
       || tokenClasses.has(i, Classification.CLOSER)
@@ -467,7 +571,7 @@ public final class Printer {
       rebuildLines();
       analyze(null);
     }
-    while (wrapLongLines() | breakGroupElements()) {
+    while (wrapLongLines() | breakGroupElements() | forceSwitchArrowBreaks()) {
       rebuildLines();
       analyze(null);
     }

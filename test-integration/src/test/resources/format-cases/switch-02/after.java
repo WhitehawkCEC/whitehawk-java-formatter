@@ -7,7 +7,8 @@ public final class SwitchWithComment {
         case CREATE, UPDATE, DELETE, SAVE, SET ->
           user instanceof SomeReallyLong___________________________________Resource
             || user instanceof AnotherReallyLong___________________________________.Resource;
-        case READ, LIST, GET -> true;
+        case READ, LIST, GET ->
+          true;
       };
     }
 
