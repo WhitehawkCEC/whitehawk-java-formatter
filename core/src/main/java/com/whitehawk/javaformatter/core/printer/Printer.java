@@ -54,7 +54,7 @@ public final class Printer {
 
   public Printer(List<Token> tokens) {
     this.tokens = TokenPreprocessor.preprocess(tokens);
-    this.ctx = new TokenContext(this.tokens);
+    this.ctx = TokenContext.from(this.tokens);
     int n = this.tokens.size();
     this.marks = new ArraySmallEnumSet<>(Mark.class, n);
     this.breakBefore = new boolean[n];

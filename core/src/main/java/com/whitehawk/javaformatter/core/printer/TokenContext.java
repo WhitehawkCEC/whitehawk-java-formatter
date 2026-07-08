@@ -14,6 +14,9 @@ import java.util.List;
 /// width, bracket matches, nearest-code-neighbour indices, and call-chain metadata. [Printer]'s
 /// layout passes read these many times per run, so they are computed up front rather than
 /// rescanned on every pass.
+///
+/// The attributes and the code that fills them are kept apart: [Builder] does all the work and this
+/// type is an immutable holder whose constructor only copies the finished arrays. Build [#from].
 @NullMarked
 final class TokenContext {
   private static final int TYPE_ARG_SCAN_LIMIT = 500;
@@ -40,107 +43,50 @@ final class TokenContext {
   /// Prefix sums giving a multiline-token count over any range; a multiline token counts as one.
   final int[] prefixMultiline;
 
-  TokenContext(List<Token> tokens) {
-    this.tokens = tokens;
-    int n = tokens.size();
-    this.tokenWidth = new int[n];
-    this.tokenClasses = new ArraySmallEnumSet<>(Classification.class, n);
-    this.tokenSym = new Sym[n];
-    this.matchOpen = new int[n];
-    this.matchClose = new int[n];
-    this.enclosingOpen = new int[n];
-    this.prevCodeIndex = new int[n];
-    this.nextCodeIndex = new int[n];
-    this.callDot = new boolean[n];
-    this.callParen = new int[n];
-    this.prefixMultiline = new int[n + 1];
-    int lastCode = -1;
-    for (int i = 0; i < n; i++) {
-      Token t = tokens.get(i);
-      String text = t.text();
-      tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
-      prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
-      Classification.classify(tokenClasses, i, t);
-      tokenSym[i] = Sym.of(text);
-      prevCodeIndex[i] = lastCode;
-      if (!t.isComment()) {
-        lastCode = i;
-      }
-    }
-    int nextCode = -1;
-    for (int i = n - 1; i >= 0; i--) {
-      nextCodeIndex[i] = nextCode;
-      if (!tokens.get(i).isComment()) {
-        nextCode = i;
-      }
-    }
-    computeBracketMatches();
-    computeCallChains();
+  private TokenContext(Builder b) {
+    this.tokens = b.tokens;
+    this.tokenWidth = b.tokenWidth;
+    this.tokenClasses = b.tokenClasses;
+    this.tokenSym = b.tokenSym;
+    this.matchOpen = b.matchOpen;
+    this.matchClose = b.matchClose;
+    this.enclosingOpen = b.enclosingOpen;
+    this.prevCodeIndex = b.prevCodeIndex;
+    this.nextCodeIndex = b.nextCodeIndex;
+    this.callDot = b.callDot;
+    this.callParen = b.callParen;
+    this.prefixMultiline = b.prefixMultiline;
   }
 
-  private void computeBracketMatches() {
-    Arrays.fill(matchOpen, -1);
-    Arrays.fill(matchClose, -1);
-    int[] openers = new int[tokens.size()];
-    int depth = 0;
-    for (int i = 0; i < tokens.size(); i++) {
-      enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
-      if (tokenClasses.has(i, Classification.OPENER)) {
-        openers[depth++] = i;
-      } else if (tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
-        int o = openers[--depth];
-        matchClose[o] = i;
-        matchOpen[i] = o;
-      }
-    }
+  static TokenContext from(List<Token> tokens) {
+    return new TokenContext(new Builder(tokens).build());
   }
 
-  /// The chain lookups (`isCallDot`, `callParen`) read only token syms/kinds and the fixed bracket
-  /// structure, so they are invariant after construction. Building the table once lets the print
-  /// loop's repeated chain rescans reuse it instead of re-walking each `.name(` — and re-scanning
-  /// any type witness — every pass.
-  private void computeCallChains() {
-    Arrays.fill(callParen, -1);
-    for (int p = 0; p < tokens.size(); p++) {
-      if (tokenSym[p] != Sym.DOT) {
-        continue;
-      }
-      int name = callName(p);
-      if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
-        continue;
-      }
-      int paren = indexOfNextCode(name);
-      if (paren >= 0 && tokenSym[paren] == Sym.LPAREN) {
-        callDot[p] = true;
-        callParen[p] = paren;
-      }
-    }
+  // --- queries: read-only structural lookups the layout passes reuse ---
+
+  int indexOfPrevCode(int i) {
+    return codeIndex(prevCodeIndex, i);
   }
 
-  int angleDepthDelta(int i) {
-    return switch (tokenSym[i]) {
-      case LT -> 1;
-      case GT -> -1;
-      case GT_GT -> -2;
-      case GT_GT_GT -> -3;
-      default -> 0;
-    };
+  int indexOfNextCode(int i) {
+    return codeIndex(nextCodeIndex, i);
   }
 
-  /// Reads the [#callDot] table built once by [#computeCallChains]; safe for -1.
+  @Nullable
+  Token prevCode(int i) {
+    int idx = indexOfPrevCode(i);
+    return idx < 0 ? null : tokens.get(idx);
+  }
+
+  @Nullable
+  Token nextCode(int i) {
+    int idx = indexOfNextCode(i);
+    return idx < 0 ? null : tokens.get(idx);
+  }
+
+  /// Reads the [#callDot] table built once by [Builder]; safe for -1.
   boolean isCallDot(int p) {
     return p >= 0 && callDot[p];
-  }
-
-  /// The method-name token of a call `.name(`, skipping an explicit type witness (`.<T> name(`),
-  /// or -1 when the witness angle brackets don't close.
-  private int callName(int dot) {
-    int name = indexOfNextCode(dot);
-    if (name >= 0 && tokenSym[name] == Sym.LT) {
-      int witnessEnd = scanTypeArguments(name);
-      name = witnessEnd < 0 ? -1 : indexOfNextCode(witnessEnd);
-    }
-    return name;
   }
 
   boolean closesAnnotation(int closeIndex) {
@@ -168,7 +114,36 @@ final class TokenContext {
     return false;
   }
 
+  int angleDepthDelta(int i) {
+    return angleDepthDelta(tokenSym, i);
+  }
+
   int scanTypeArguments(int open) {
+    return scanTypeArguments(tokens, tokenSym, tokenClasses, open);
+  }
+
+  // --- shared helpers: usable both while building (no instance yet) and at runtime ---
+
+  private static int codeIndex(int[] index, int i) {
+    return i < 0 ? -1 : index[i];
+  }
+
+  private static int angleDepthDelta(Sym[] tokenSym, int i) {
+    return switch (tokenSym[i]) {
+      case LT -> 1;
+      case GT -> -1;
+      case GT_GT -> -2;
+      case GT_GT_GT -> -3;
+      default -> 0;
+    };
+  }
+
+  private static int scanTypeArguments(
+    List<Token> tokens,
+    Sym[] tokenSym,
+    ArraySmallEnumSet<Classification> tokenClasses,
+    int open
+  ) {
     int depth = 1;
     for (int i = open + 1; i < tokens.size() && i - open < TYPE_ARG_SCAN_LIMIT; i++) {
       Token t = tokens.get(i);
@@ -178,7 +153,7 @@ final class TokenContext {
       switch (tokenSym[i]) {
         case LT -> depth++;
         case GT, GT_GT, GT_GT_GT -> {
-          depth += angleDepthDelta(i);
+          depth += angleDepthDelta(tokenSym, i);
           if (depth <= 0) {
             return depth == 0 ? i : -1;
           }
@@ -198,23 +173,120 @@ final class TokenContext {
     return -1;
   }
 
-  @Nullable
-  Token prevCode(int i) {
-    int idx = indexOfPrevCode(i);
-    return idx < 0 ? null : tokens.get(idx);
-  }
+  /// Fills the metadata arrays from the token stream, then hands them to the [TokenContext]
+  /// constructor. Mutating work lives here so the context itself is a plain immutable holder.
+  private static final class Builder {
+    private final List<Token> tokens;
+    private final int[] tokenWidth;
+    private final ArraySmallEnumSet<Classification> tokenClasses;
+    private final Sym[] tokenSym;
+    private final int[] matchOpen;
+    private final int[] matchClose;
+    private final int[] enclosingOpen;
+    private final int[] prevCodeIndex;
+    private final int[] nextCodeIndex;
+    private final boolean[] callDot;
+    private final int[] callParen;
+    private final int[] prefixMultiline;
 
-  int indexOfPrevCode(int i) {
-    return i < 0 ? -1 : prevCodeIndex[i];
-  }
+    Builder(List<Token> tokens) {
+      int n = tokens.size();
+      this.tokens = tokens;
+      this.tokenWidth = new int[n];
+      this.tokenClasses = new ArraySmallEnumSet<>(Classification.class, n);
+      this.tokenSym = new Sym[n];
+      this.matchOpen = new int[n];
+      this.matchClose = new int[n];
+      this.enclosingOpen = new int[n];
+      this.prevCodeIndex = new int[n];
+      this.nextCodeIndex = new int[n];
+      this.callDot = new boolean[n];
+      this.callParen = new int[n];
+      this.prefixMultiline = new int[n + 1];
+    }
 
-  @Nullable
-  Token nextCode(int i) {
-    int idx = indexOfNextCode(i);
-    return idx < 0 ? null : tokens.get(idx);
-  }
+    Builder build() {
+      classifyTokens();
+      linkCodeNeighbours();
+      matchBrackets();
+      linkCallChains();
+      return this;
+    }
 
-  int indexOfNextCode(int i) {
-    return i < 0 ? -1 : nextCodeIndex[i];
+    /// Per-token symbol, class, width, running multiline count, and the backward code-neighbour link.
+    private void classifyTokens() {
+      int lastCode = -1;
+      for (int i = 0; i < tokens.size(); i++) {
+        Token t = tokens.get(i);
+        String text = t.text();
+        tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
+        prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
+        Classification.classify(tokenClasses, i, t);
+        tokenSym[i] = Sym.of(text);
+        prevCodeIndex[i] = lastCode;
+        if (!t.isComment()) {
+          lastCode = i;
+        }
+      }
+    }
+
+    private void linkCodeNeighbours() {
+      int nextCode = -1;
+      for (int i = tokens.size() - 1; i >= 0; i--) {
+        nextCodeIndex[i] = nextCode;
+        if (!tokens.get(i).isComment()) {
+          nextCode = i;
+        }
+      }
+    }
+
+    private void matchBrackets() {
+      Arrays.fill(matchOpen, -1);
+      Arrays.fill(matchClose, -1);
+      int[] openers = new int[tokens.size()];
+      int depth = 0;
+      for (int i = 0; i < tokens.size(); i++) {
+        enclosingOpen[i] = depth > 0 ? openers[depth - 1] : -1;
+        if (tokenClasses.has(i, Classification.OPENER)) {
+          openers[depth++] = i;
+        } else if (tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
+          int o = openers[--depth];
+          matchClose[o] = i;
+          matchOpen[i] = o;
+        }
+      }
+    }
+
+    /// The chain lookups read only token syms/kinds and the fixed bracket structure, so they are
+    /// invariant. Tabulating them once lets the print loop's repeated chain rescans reuse the table
+    /// instead of re-walking each `.name(` — and re-scanning any type witness — every pass.
+    private void linkCallChains() {
+      Arrays.fill(callParen, -1);
+      for (int p = 0; p < tokens.size(); p++) {
+        if (tokenSym[p] != Sym.DOT) {
+          continue;
+        }
+        int name = callName(p);
+        if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+          continue;
+        }
+        int paren = codeIndex(nextCodeIndex, name);
+        if (paren >= 0 && tokenSym[paren] == Sym.LPAREN) {
+          callDot[p] = true;
+          callParen[p] = paren;
+        }
+      }
+    }
+
+    /// The method-name token of a call `.name(`, skipping an explicit type witness (`.<T> name(`),
+    /// or -1 when the witness angle brackets don't close.
+    private int callName(int dot) {
+      int name = codeIndex(nextCodeIndex, dot);
+      if (name >= 0 && tokenSym[name] == Sym.LT) {
+        int witnessEnd = scanTypeArguments(tokens, tokenSym, tokenClasses, name);
+        name = witnessEnd < 0 ? -1 : codeIndex(nextCodeIndex, witnessEnd);
+      }
+      return name;
+    }
   }
 }
