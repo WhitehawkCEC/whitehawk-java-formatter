@@ -8,6 +8,7 @@ import java.util.Set;
 /// @param end            offset just past the last character
 /// @param newlinesBefore line terminators between the previous token and this one
 /// @param atColumn0      token starts at the very beginning of its line
+/// @param sym            the canonical symbol the text names, or [Sym#OTHER]; derived from `text`
 @NullMarked
 public record Token(
   Kind kind,
@@ -15,7 +16,8 @@ public record Token(
   int start,
   int end,
   int newlinesBefore,
-  boolean atColumn0
+  boolean atColumn0,
+  Sym sym
 ) {
   private static final Set<String> PRIMITIVES = Set.of(
     "boolean",
@@ -116,7 +118,7 @@ public record Token(
     int newlinesBefore,
     boolean atColumn0
   ) {
-    return new Token(kind, text, start, end, newlinesBefore, atColumn0);
+    return new Token(kind, text, start, end, newlinesBefore, atColumn0, Sym.of(text));
   }
 
   public boolean is(String s) {
