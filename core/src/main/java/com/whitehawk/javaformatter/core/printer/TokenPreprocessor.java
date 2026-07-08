@@ -9,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -50,7 +51,7 @@ final class TokenPreprocessor {
   /// An expression combined with one of these reads as an operand and gets parenthesized;
   /// assignment, `->`, and the ternary `?`/`:` are excluded so `x = ..`, `case y -> ..`, and
   /// `c ? .. : ..` keep their bare form (as do `return`/`yield`, which aren't operators).
-  private static final Set<Sym> BINARY_OPERAND_OPERATORS = Set.of(
+  private static final Set<Sym> BINARY_OPERAND_OPERATORS = EnumSet.of(
     Sym.BAR_BAR,
     Sym.AMP_AMP,
     Sym.BAR,
