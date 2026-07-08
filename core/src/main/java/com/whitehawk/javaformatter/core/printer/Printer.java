@@ -438,8 +438,8 @@ public final class Printer {
   }
 
   private static boolean endsOperand(Token t) {
-    return t.is(")")
-      || t.is("]")
+    return t.sym() == Sym.RPAREN
+      || t.sym() == Sym.RBRACKET
       || isLiteral(t)
       || t.kind() == Kind.IDENT
       && !t.isKeyword();
@@ -725,9 +725,9 @@ public final class Printer {
     if (prev == null || !endsOperand(prev)) {
       return false;
     }
-    return switch (ctx.tokens.get(j).text()) {
-      case "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>", "<", ">", "<=", ">=", "==",
-          "!=", "&&", "||", "instanceof" -> true;
+    return switch (ctx.tokens.get(j).sym()) {
+      case PLUS, MINUS, STAR, SLASH, PERCENT, AMP, BAR, CARET, LT_LT, GT_GT, GT_GT_GT, LT, GT, LE,
+          GE, EQ, NE, AMP_AMP, BAR_BAR, INSTANCEOF -> true;
       default -> false;
     };
   }
