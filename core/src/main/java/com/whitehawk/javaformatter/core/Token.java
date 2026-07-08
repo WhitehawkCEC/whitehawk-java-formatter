@@ -106,6 +106,19 @@ public record Token(
     "_"
   );
 
+  /// Builds a token, deriving any per-token facts from its text. Prefer this over the constructor
+  /// so those facts are computed once at construction.
+  public static Token of(
+    Kind kind,
+    String text,
+    int start,
+    int end,
+    int newlinesBefore,
+    boolean atColumn0
+  ) {
+    return new Token(kind, text, start, end, newlinesBefore, atColumn0);
+  }
+
   public boolean is(String s) {
     return text.equals(s);
   }
