@@ -2,6 +2,7 @@ package com.whitehawk.javaformatter.core;
 
 import com.whitehawk.javaformatter.core.lexer.JavaLexer;
 import com.whitehawk.javaformatter.core.printer.Printer;
+import com.whitehawk.javaformatter.core.printer.TokenContext;
 
 import org.jspecify.annotations.NullMarked;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -53,7 +54,7 @@ public class FormatterBenchmark {
 
   @Benchmark
   public String print() {
-    return new Printer(tokens).print();
+    return new Printer(TokenContext.from(tokens)).print();
   }
 
   @Benchmark
