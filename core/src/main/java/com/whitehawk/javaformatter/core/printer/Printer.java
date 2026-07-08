@@ -50,6 +50,11 @@ public final class Printer {
   /// never change, so these are computed once rather than rescanned on every pass.
   private final int[] prevCodeIndex;
   private final int[] nextCodeIndex;
+  /// Call-chain metadata, invariant after construction: `callDot[i]` marks a `.name(` call dot,
+  /// `callParen[i]` its argument-list `(` (-1 otherwise). Precomputed once because the print loop
+  /// rescans chains — and any type witness — every pass.
+  private final boolean[] callDot;
+  private final int[] callParen;
   /// Recomputed only by an [#analyze] pass that added a mark bit; later passes reuse it.
   private final boolean[] spaceBefore;
   /// Allocated once because the pass re-runs every wrap iteration.
@@ -80,6 +85,8 @@ public final class Printer {
     this.tokenSym = new Sym[n];
     this.prevCodeIndex = new int[n];
     this.nextCodeIndex = new int[n];
+    this.callDot = new boolean[n];
+    this.callParen = new int[n];
     this.spaceBefore = new boolean[n];
     this.openerStack = new int[n];
     this.prefixWidth = new int[n + 1];
@@ -105,6 +112,7 @@ public final class Printer {
       }
     }
     computeBracketMatches();
+    computeCallChains();
     computeBreaks();
     buildLines();
     this.lineIndent = new int[lines.size()];
@@ -133,6 +141,28 @@ public final class Printer {
         int o = openers[--depth];
         matchClose[o] = i;
         matchOpen[i] = o;
+      }
+    }
+  }
+
+  /// The chain lookups (`isCallDot`, `callParen`) read only token syms/kinds and the fixed bracket
+  /// structure, so they are invariant after construction. Building the table once lets the print
+  /// loop's repeated chain rescans reuse it instead of re-walking each `.name(` — and re-scanning
+  /// any type witness — every pass.
+  private void computeCallChains() {
+    Arrays.fill(callParen, -1);
+    for (int p = 0; p < tokens.size(); p++) {
+      if (tokenSym[p] != Sym.DOT) {
+        continue;
+      }
+      int name = callName(p);
+      if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+        continue;
+      }
+      int paren = indexOfNextCode(name);
+      if (paren >= 0 && tokenSym[paren] == Sym.LPAREN) {
+        callDot[p] = true;
+        callParen[p] = paren;
       }
     }
   }
@@ -186,17 +216,14 @@ public final class Printer {
   private void forceChainBreaks() {
     int n = tokens.size();
     int[] nextCall = new int[n];
-    boolean[] callDot = new boolean[n];
     boolean[] linked = new boolean[n];
     Arrays.fill(nextCall, -1);
     for (int p = 0; p < n; p++) {
-      if (!isCallDot(p)) {
+      if (!callDot[p]) {
         continue;
       }
-      callDot[p] = true;
-      int paren = callParen(p);
-      int next = indexOfNextCode(matchClose[paren]);
-      if (next >= 0 && isCallDot(next)) {
+      int next = indexOfNextCode(matchClose[callParen[p]]);
+      if (next >= 0 && callDot[next]) {
         nextCall[p] = next;
         linked[next] = true;
       }
@@ -213,7 +240,7 @@ public final class Printer {
         continue;
       }
       int last = chain.get(chain.size() - 1);
-      int lastClose = matchClose[callParen(last)];
+      int lastClose = matchClose[callParen[last]];
       if (tokenLine[p] != tokenLine[lastClose]) {
         for (int dot : chain) {
           breakBefore[dot] = true;
@@ -248,16 +275,9 @@ public final class Printer {
     return false;
   }
 
+  /// Reads the [#callDot] table built once by [#computeCallChains]; safe for -1.
   private boolean isCallDot(int p) {
-    if (tokenSym[p] != Sym.DOT) {
-      return false;
-    }
-    int name = callName(p);
-    if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
-      return false;
-    }
-    int paren = indexOfNextCode(name);
-    return paren >= 0 && tokenSym[paren] == Sym.LPAREN;
+    return p >= 0 && callDot[p];
   }
 
   /// The method-name token of a call `.name(`, skipping an explicit type witness (`.<T> name(`),
@@ -269,11 +289,6 @@ public final class Printer {
       name = witnessEnd < 0 ? -1 : indexOfNextCode(witnessEnd);
     }
     return name;
-  }
-
-  /// The `(` opening a chain call's argument list, skipping an explicit type witness.
-  private int callParen(int dot) {
-    return indexOfNextCode(callName(dot));
   }
 
   /// Keeps an already-broken string-concatenation `+`, so a piecewise-built literal (e.g. a regex
@@ -915,7 +930,7 @@ public final class Printer {
     List<Integer> dots = new ArrayList<>();
     while (dot >= 0 && dot <= end && isCallDot(dot)) {
       dots.add(dot);
-      int close = matchClose[callParen(dot)];
+      int close = matchClose[callParen[dot]];
       if (close < 0) {
         break;
       }
@@ -965,7 +980,7 @@ public final class Printer {
       if (!breakBefore[dot] || !isCallDot(dot)) {
         continue; // only a call that chain-breaking put on its own line
       }
-      int open = callParen(dot);
+      int open = callParen[dot];
       int close = matchClose[open];
       if (close < open + 2 || !breakBefore[open + 1]) {
         continue; // empty or already-inline argument list
