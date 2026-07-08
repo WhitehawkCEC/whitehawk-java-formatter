@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.3.4](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.3...0.3.4) (2026-07-08)
+
+
+### Features
+
+* **app-cli:** print stats upon completion ([a16f965](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/a16f9656ef1ced79a256fb7cf7695c3a1dceeb30))
+* **core:** add JavaLexer.tokenize to lex directly into a list ([e247dbe](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/e247dbee673be0e34106649b6c3cd7087f007d3b))
+* **core:** break enum constant argument lists as siblings ([ee93b3d](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ee93b3deda9050820a9b7c8bb2b2cd5bc5931bf6))
+* **core:** break switch case arrows as siblings ([4e679db](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/4e679db54d9b3ee7e9d1ffa6ae6373b3490a0e3d))
+* **core:** lex via JavaLexer.tokenize in Formatter ([ae09f94](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ae09f94a28fad1cbb59d37948eafd34040690658))
+* **core:** use switch for text comparison ([0b37748](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/0b37748b418dd3f115bed64efc283e9af247ee7c))
+
+
+### Bug Fixes
+
+* **adapter-git-cli:** properly close `InputStream` ([78b0ca1](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/78b0ca19a194c3927e19012125fedfa8599ccfeb))
+
 ## [0.3.3](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.2...0.3.3) (2026-07-07)
 
 
