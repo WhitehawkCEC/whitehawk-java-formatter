@@ -118,7 +118,7 @@ public final class Printer {
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
     // preceding token is a line comment, which would otherwise swallow the rest of the line.
     for (int i = 1; i < n; i++) {
-      if (ctx.tokenSym[i] == Sym.THROWS && ctx.tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
+      if (ctx.tokens.get(i).sym() == Sym.THROWS && ctx.tokens.get(i - 1).kind() != Kind.LINE_COMMENT) {
         breakBefore[i] = false;
       }
     }
@@ -180,7 +180,7 @@ public final class Printer {
           j = ctx.matchOpen[j]; // a nested group is skipped whole
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (ctx.tokenSym[j] == Sym.PLUS) {
+        } else if (ctx.tokens.get(j).sym() == Sym.PLUS) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
         }
@@ -190,7 +190,7 @@ public final class Printer {
           j = ctx.matchClose[j];
         } else if (endsOperatorElement(j)) {
           break;
-        } else if (ctx.tokenSym[j] == Sym.PLUS) {
+        } else if (ctx.tokens.get(j).sym() == Sym.PLUS) {
           breakBefore[j] = true;
           forcedBreak[j] = true;
           spread[j] = true;
@@ -200,7 +200,7 @@ public final class Printer {
   }
 
   private boolean isStringConcatPlus(int i) {
-    if (ctx.tokenSym[i] != Sym.PLUS) {
+    if (ctx.tokens.get(i).sym() != Sym.PLUS) {
       return false;
     }
     Token prev = ctx.prevCode(i);
@@ -248,7 +248,7 @@ public final class Printer {
   }
 
   private boolean isLogicalOp(int i) {
-    return ctx.tokenSym[i] == Sym.AMP_AMP || ctx.tokenSym[i] == Sym.BAR_BAR;
+    return ctx.tokens.get(i).sym() == Sym.AMP_AMP || ctx.tokens.get(i).sym() == Sym.BAR_BAR;
   }
 
   /// Enum constants are siblings: once one constant's argument list is broken across lines, every
@@ -258,11 +258,11 @@ public final class Printer {
   private void forceEnumConstantBreaks() {
     int n = ctx.tokens.size();
     for (int e = 0; e < n; e++) {
-      if (ctx.tokenSym[e] != Sym.ENUM) {
+      if (ctx.tokens.get(e).sym() != Sym.ENUM) {
         continue;
       }
       int bodyOpen = e + 1;
-      while (bodyOpen < n && ctx.tokenSym[bodyOpen] != Sym.LBRACE) {
+      while (bodyOpen < n && ctx.tokens.get(bodyOpen).sym() != Sym.LBRACE) {
         bodyOpen++;
       }
       if (bodyOpen >= n || ctx.matchClose[bodyOpen] < 0) {
@@ -272,7 +272,7 @@ public final class Printer {
       List<Integer> parens = new ArrayList<>();
       boolean anyBroken = false;
       for (int i = bodyOpen + 1; i < bodyClose; i++) {
-        if (ctx.tokenSym[i] == Sym.SEMI) {
+        if (ctx.tokens.get(i).sym() == Sym.SEMI) {
           break; // the constant list ends; the methods after it are not siblings
         }
         if (!ctx.tokenClasses.has(i, Classification.OPENER)) {
@@ -282,7 +282,7 @@ public final class Printer {
         if (c < 0) {
           break;
         }
-        if (ctx.tokenSym[i] == Sym.LPAREN && isEnumConstantParen(i)) {
+        if (ctx.tokens.get(i).sym() == Sym.LPAREN && isEnumConstantParen(i)) {
           parens.add(i);
           anyBroken |= c > i + 1 && breakBefore[i + 1];
         }
@@ -321,15 +321,15 @@ public final class Printer {
     boolean changed = false;
     int n = ctx.tokens.size();
     for (int s = 0; s < n; s++) {
-      if (ctx.tokenSym[s] != Sym.SWITCH) {
+      if (ctx.tokens.get(s).sym() != Sym.SWITCH) {
         continue;
       }
       int lparen = ctx.indexOfNextCode(s);
-      if (lparen < 0 || ctx.tokenSym[lparen] != Sym.LPAREN || ctx.matchClose[lparen] < 0) {
+      if (lparen < 0 || ctx.tokens.get(lparen).sym() != Sym.LPAREN || ctx.matchClose[lparen] < 0) {
         continue;
       }
       int bodyOpen = ctx.indexOfNextCode(ctx.matchClose[lparen]);
-      if (bodyOpen < 0 || ctx.tokenSym[bodyOpen] != Sym.LBRACE || ctx.matchClose[bodyOpen] < 0) {
+      if (bodyOpen < 0 || ctx.tokens.get(bodyOpen).sym() != Sym.LBRACE || ctx.matchClose[bodyOpen] < 0) {
         continue;
       }
       int bodyClose = ctx.matchClose[bodyOpen];
@@ -337,7 +337,7 @@ public final class Printer {
       boolean anyMultiline = false;
       int i = bodyOpen + 1;
       while (i < bodyClose) {
-        if (ctx.tokenSym[i] != Sym.CASE && ctx.tokenSym[i] != Sym.DEFAULT) {
+        if (ctx.tokens.get(i).sym() != Sym.CASE && ctx.tokens.get(i).sym() != Sym.DEFAULT) {
           i = ctx.tokenClasses.has(i, Classification.OPENER) && ctx.matchClose[i] >= 0
             ? ctx.matchClose[i] + 1
             : i + 1;
@@ -353,7 +353,7 @@ public final class Printer {
           break;
         }
         int end;
-        if (ctx.tokenSym[body] == Sym.LBRACE && ctx.matchClose[body] >= 0) {
+        if (ctx.tokens.get(body).sym() == Sym.LBRACE && ctx.matchClose[body] >= 0) {
           end = ctx.matchClose[body]; // block arm: its `-> {` never breaks
         } else {
           end = armExpressionEnd(body, bodyClose);
@@ -390,7 +390,7 @@ public final class Printer {
         j = ctx.matchClose[j];
         continue;
       }
-      switch (ctx.tokenSym[j]) {
+      switch (ctx.tokens.get(j).sym()) {
         case ARROW -> {
           return j;
         }
@@ -410,7 +410,7 @@ public final class Printer {
         j = ctx.matchClose[j];
         continue;
       }
-      if (ctx.tokenSym[j] == Sym.SEMI) {
+      if (ctx.tokens.get(j).sym() == Sym.SEMI) {
         return j;
       }
     }
@@ -420,7 +420,7 @@ public final class Printer {
   private boolean endsOperatorElement(int i) {
     return ctx.tokenClasses.has(i, Classification.OPENER)
       || ctx.tokenClasses.has(i, Classification.CLOSER)
-      || switch (ctx.tokenSym[i]) {
+      || switch (ctx.tokens.get(i).sym()) {
            case COMMA, SEMI, QUESTION, COLON, ARROW, ASSIGN -> true;
            default -> false;
          };
@@ -514,9 +514,9 @@ public final class Printer {
         openerStack[depth++] = i;
       } else if (ctx.tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
         depth--;
-      } else if (ctx.tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
+      } else if (ctx.tokens.get(i).sym() == Sym.COMMA && generic == 0 && depth > 0) {
         int o = openerStack[depth - 1];
-        if (ctx.tokenSym[o] == Sym.LPAREN && breakBefore[o + 1]) {
+        if (ctx.tokens.get(o).sym() == Sym.LPAREN && breakBefore[o + 1]) {
           // The break starts the next element, but a trailing comment on the comma's line stays
           // put: skip past it so the comment is not pushed onto its own line.
           int target = i + 1;
@@ -621,7 +621,7 @@ public final class Printer {
   private boolean moveAssignmentBreaks() {
     boolean changed = false;
     for (int i = 1; i < ctx.tokens.size(); i++) {
-      if (!breakBefore[i] || forcedBreak[i] || ctx.tokenSym[i - 1] != Sym.ASSIGN) {
+      if (!breakBefore[i] || forcedBreak[i] || ctx.tokens.get(i - 1).sym() != Sym.ASSIGN) {
         continue;
       }
       int end = rhsEnd(i);
@@ -661,7 +661,7 @@ public final class Printer {
     int depth = 0;
     int generic = 0;
     for (int j = i; j < ctx.tokens.size(); j++) {
-      Sym sym = ctx.tokenSym[j];
+      Sym sym = ctx.tokens.get(j).sym();
       if (
         depth == 0
           && generic == 0
@@ -690,7 +690,7 @@ public final class Printer {
     int depth = 0;
     int generic = 0;
     for (int j = i; j < ctx.tokens.size(); j++) {
-      Sym sym = ctx.tokenSym[j];
+      Sym sym = ctx.tokens.get(j).sym();
       if (
         depth == 0
           && generic == 0
@@ -738,8 +738,8 @@ public final class Printer {
   private boolean wrapsConditional(int open, int prev) {
     if (prev < 0
       || endsOperand(ctx.tokens.get(prev))
-      || ctx.tokenSym[prev] == Sym.COMMA
-      || ctx.tokenSym[prev] == Sym.LPAREN
+      || ctx.tokens.get(prev).sym() == Sym.COMMA
+      || ctx.tokens.get(prev).sym() == Sym.LPAREN
       || ctx.tokenClasses.has(prev, Classification.PAREN_KEYWORD)) {
       return false;
     }
@@ -762,7 +762,7 @@ public final class Printer {
         depth == 0
           && generic == 0
           && !marks.has(j, Mark.WILDCARD)
-          && (ctx.tokenSym[j] == Sym.QUESTION || ctx.tokenSym[j] == Sym.COLON && !ops.isEmpty())
+          && (ctx.tokens.get(j).sym() == Sym.QUESTION || ctx.tokens.get(j).sym() == Sym.COLON && !ops.isEmpty())
       ) {
         ops.add(j);
       }
@@ -886,7 +886,7 @@ public final class Printer {
 
   private boolean hasBraceInside(int open, int close) {
     for (int i = open + 1; i < close; i++) {
-      if (ctx.tokenSym[i] == Sym.LBRACE) {
+      if (ctx.tokens.get(i).sym() == Sym.LBRACE) {
         return true;
       }
     }
@@ -908,7 +908,7 @@ public final class Printer {
         openerStack[depth++] = i;
       } else if (ctx.tokenClasses.has(i, Classification.CLOSER) && depth > 0) {
         depth--;
-      } else if (ctx.tokenSym[i] == Sym.COMMA && generic == 0 && depth > 0) {
+      } else if (ctx.tokens.get(i).sym() == Sym.COMMA && generic == 0 && depth > 0) {
         multiArg[openerStack[depth - 1]] = true;
       }
     }
@@ -919,7 +919,7 @@ public final class Printer {
   /// its arguments stay broken.
   private boolean nestedInBrokenParen(int dot, int close) {
     for (int o = ctx.enclosingOpen[dot]; o >= 0; o = ctx.enclosingOpen[o]) {
-      if (ctx.tokenSym[o] == Sym.LPAREN && ctx.matchClose[o] > close && breakBefore[ctx.matchClose[o]]) {
+      if (ctx.tokens.get(o).sym() == Sym.LPAREN && ctx.matchClose[o] > close && breakBefore[ctx.matchClose[o]]) {
         return true;
       }
     }
@@ -930,7 +930,7 @@ public final class Printer {
   /// (`Map.of(\n  "a",\n  "b"\n)`) too, so the outer break is kept.
   private boolean containsBrokenMultiArgCall(int open, int close, boolean[] multiArg) {
     for (int i = open + 1; i < close; i++) {
-      if (ctx.tokenSym[i] == Sym.LPAREN && breakBefore[ctx.matchClose[i]] && multiArg[i]) {
+      if (ctx.tokens.get(i).sym() == Sym.LPAREN && breakBefore[ctx.matchClose[i]] && multiArg[i]) {
         return true;
       }
     }
@@ -942,7 +942,7 @@ public final class Printer {
   private boolean collapseControlFlowHeaders() {
     boolean changed = false;
     for (int open = 0; open < ctx.tokens.size(); open++) {
-      if (ctx.tokenSym[open] != Sym.LPAREN || !breakBefore[open + 1]) {
+      if (ctx.tokens.get(open).sym() != Sym.LPAREN || !breakBefore[open + 1]) {
         continue; // not an isolated paren
       }
       int close = ctx.matchClose[open];
@@ -951,12 +951,12 @@ public final class Printer {
         continue;
       }
       int brace = ctx.indexOfNextCode(close);
-      if (brace < 0 || ctx.tokenSym[brace] != Sym.LBRACE) {
+      if (brace < 0 || ctx.tokens.get(brace).sym() != Sym.LBRACE) {
         continue; // not a block header (excludes `return (..)`, `throw (..)`, etc.)
       }
       // A try-with-resources listing multiple resources (a top-level `;`) keeps each resource on
       // its own line; only a single-resource header collapses.
-      if (ctx.tokenSym[keyword] == Sym.TRY && hasTopLevelSemicolon(open, close)) {
+      if (ctx.tokens.get(keyword).sym() == Sym.TRY && hasTopLevelSemicolon(open, close)) {
         continue;
       }
       int li = lineIndexOf(open);
@@ -983,7 +983,7 @@ public final class Printer {
         depth++;
       } else if (ctx.tokenClasses.has(i, Classification.CLOSER)) {
         depth--;
-      } else if (depth == 0 && ctx.tokenSym[i] == Sym.SEMI) {
+      } else if (depth == 0 && ctx.tokens.get(i).sym() == Sym.SEMI) {
         return true;
       }
     }
@@ -1047,7 +1047,7 @@ public final class Printer {
       }
       Scope top = stack.peek();
       int firstToken = line.firstToken();
-      Sym firstSym = ctx.tokenSym[firstToken];
+      Sym firstSym = ctx.tokens.get(firstToken).sym();
       // `scopeFor` allocates a stack iterator, so resolve the closer's scope once and reuse it for
       // both the close indent and the body indent below. `top` is an unused non-null placeholder
       // when the line does not start with a closer.
@@ -1105,7 +1105,7 @@ public final class Printer {
 
   /// A ternary's `:` aligns with its matching `?` rather than taking the usual continuation indent.
   private int continuationIndent(Scope top, int firstToken, int prevIndent) {
-    Sym sym = ctx.tokenSym[firstToken];
+    Sym sym = ctx.tokens.get(firstToken).sym();
     if (sym == Sym.QUESTION && !marks.has(firstToken, Mark.WILDCARD)) {
       return prevIndent + INDENT;
     }
@@ -1124,7 +1124,7 @@ public final class Printer {
   /// fall through into the next label.
   private boolean isColonCaseLine(Line line) {
     for (int i = line.firstToken(); i < line.firstToken() + line.tokenCount(); i++) {
-      if (ctx.tokenSym[i] == Sym.ARROW) {
+      if (ctx.tokens.get(i).sym() == Sym.ARROW) {
         return false;
       }
     }
@@ -1170,7 +1170,7 @@ public final class Printer {
         top.elementOpen = true;
         top.elementStartIndent = indent;
         top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
-          && (ctx.tokenSym[i] == Sym.CASE || ctx.tokenSym[i] == Sym.DEFAULT);
+          && (ctx.tokens.get(i).sym() == Sym.CASE || ctx.tokens.get(i).sym() == Sym.DEFAULT);
       }
       // A `switch` on a wrapped continuation line sits past its line's indent; measure its column
       // so its body indents from the keyword rather than from the continuation indent.
@@ -1185,7 +1185,7 @@ public final class Printer {
   private void analyzeToken(Deque<Scope> stack, int i, int indent, int column) {
     Token t = ctx.tokens.get(i);
     Scope top = stack.peek();
-    Sym sym = ctx.tokenSym[i];
+    Sym sym = ctx.tokens.get(i).sym();
     updateAnnotationState(top, t, sym);
 
     switch (sym) {
@@ -1198,7 +1198,7 @@ public final class Printer {
           contentIndent += INDENT;
         }
         Scope scope = newScope(Scope.Kind.PAREN, contentIndent, indent);
-        scope.forParen = prev >= 0 && (ctx.tokenSym[prev] == Sym.FOR || ctx.tokenSym[prev] == Sym.TRY);
+        scope.forParen = prev >= 0 && (ctx.tokens.get(prev).sym() == Sym.FOR || ctx.tokens.get(prev).sym() == Sym.TRY);
         stack.push(scope);
       }
       case LBRACKET -> stack.push(newScope(Scope.Kind.BRACKET, indent + INDENT, indent));
@@ -1328,7 +1328,7 @@ public final class Printer {
   private Scope openBrace(Deque<Scope> stack, int i, int indent) {
     Scope top = stack.peek();
     int prev = ctx.indexOfPrevCode(i);
-    Sym prevSym = prev < 0 ? Sym.OTHER : ctx.tokenSym[prev];
+    Sym prevSym = prev < 0 ? Sym.OTHER : ctx.tokens.get(prev).sym();
     boolean arrayInit = switch (prevSym) {
       case ASSIGN, COMMA, LBRACE, LPAREN, RBRACKET -> true;
       default -> false;
@@ -1415,7 +1415,7 @@ public final class Printer {
       return;
     }
     Scope top = stack.peek();
-    if (ctx.tokenSym[last] == Sym.RBRACE) {
+    if (ctx.tokens.get(last).sym() == Sym.RBRACE) {
       closeElement(top);
     } else if (top.elementOpen && top.annotationState == 2) {
       closeElement(top); // annotation-only line: next line starts fresh at the same indent
@@ -1433,8 +1433,8 @@ public final class Printer {
       if (
         before.kind() == Kind.IDENT
           && !ctx.tokenClasses.has(beforeOpen, Classification.KEYWORD)
-          || ctx.tokenSym[beforeOpen] == Sym.RPAREN
-          || ctx.tokenSym[beforeOpen] == Sym.RBRACKET
+          || ctx.tokens.get(beforeOpen).sym() == Sym.RPAREN
+          || ctx.tokens.get(beforeOpen).sym() == Sym.RBRACKET
       ) {
         return false;
       }
@@ -1444,7 +1444,7 @@ public final class Printer {
       return false;
     }
     Token next = ctx.tokens.get(nextIndex);
-    return switch (ctx.tokenSym[nextIndex]) {
+    return switch (ctx.tokens.get(nextIndex).sym()) {
       case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
       default -> next.kind() != Kind.PUNCT
@@ -1462,7 +1462,7 @@ public final class Printer {
     if (isLiteral(prev)) {
       return false;
     }
-    Sym prevSym = ctx.tokenSym[prevIndex];
+    Sym prevSym = ctx.tokens.get(prevIndex).sym();
     if (prev.kind() == Kind.IDENT) {
       return ctx.tokenClasses.has(prevIndex, Classification.KEYWORD) && switch (prevSym) {
         case THIS, SUPER, TRUE, FALSE, NULL -> false;
@@ -1485,7 +1485,7 @@ public final class Printer {
     if (prevIndex < 0) {
       return -1;
     }
-    boolean plausiblePrev = switch (ctx.tokenSym[prevIndex]) {
+    boolean plausiblePrev = switch (ctx.tokens.get(prevIndex).sym()) {
       case DOT, COMMA, LPAREN, LT, LBRACE, AMP, BAR, ASSIGN, RETURN, NEW, EXTENDS, SUPER,
         IMPLEMENTS, INSTANCEOF, CASE, YIELD, ARROW, METHOD_REF, QUESTION, COLON,
         // Type-parameter declarations: `public <T> T foo(..)`, `interface Foo<T>`, `<T> T foo(..)`.
@@ -1508,7 +1508,7 @@ public final class Printer {
       return end;
     }
     boolean plausibleFollower = ctx.tokens.get(followerIndex).kind() == Kind.IDENT
-      || switch (ctx.tokenSym[followerIndex]) {
+      || switch (ctx.tokens.get(followerIndex).sym()) {
            case LPAREN, RPAREN, COMMA, DOT, METHOD_REF, SEMI, LBRACKET, LBRACE, GT, GT_GT, GT_GT_GT,
              ELLIPSIS, AMP, ARROW, ASSIGN, AT -> true;
            default -> false;
@@ -1519,7 +1519,7 @@ public final class Printer {
   private void markTypeArguments(int open, int end) {
     mark(open, Mark.GENERIC_ANGLE);
     for (int i = open + 1; i <= end; i++) {
-      switch (ctx.tokenSym[i]) {
+      switch (ctx.tokens.get(i).sym()) {
         case LT, GT, GT_GT, GT_GT_GT -> mark(i, Mark.GENERIC_ANGLE);
         case QUESTION -> mark(i, Mark.WILDCARD);
         default -> {}
@@ -1542,7 +1542,7 @@ public final class Printer {
         end++;
       }
       boolean endForced = end + 1 < lines.size() && forcedBreak[lines.get(end + 1).firstToken()];
-      boolean joinsStatement = ctx.tokenSym[lastTokenIndex(end)] == Sym.SEMI || endForced;
+      boolean joinsStatement = ctx.tokens.get(lastTokenIndex(end)).sym() == Sym.SEMI || endForced;
       if (end > li && joinsStatement) {
         int joinEnd = joinEnd(li, end, endForced);
         for (int j = li + 1; j <= joinEnd; j++) {
@@ -1565,7 +1565,7 @@ public final class Printer {
         return hasMultilineToken(startLine, m - 1) ? startLine : m - 1;
       }
     }
-    boolean endChainDot = endForced && ctx.tokenSym[lines.get(end + 1).firstToken()] == Sym.DOT;
+    boolean endChainDot = endForced && ctx.tokens.get(lines.get(end + 1).firstToken()).sym() == Sym.DOT;
     return endChainDot && !hasMultilineToken(startLine, end) ? end : startLine;
   }
 
@@ -1578,7 +1578,7 @@ public final class Printer {
     if (isCommentOnly(line)) {
       return false;
     }
-    Sym first = ctx.tokenSym[line.firstToken()];
+    Sym first = ctx.tokens.get(line.firstToken()).sym();
     if (first == Sym.RBRACE || first == Sym.AT) {
       return false;
     }
@@ -1587,11 +1587,11 @@ public final class Printer {
       return false;
     }
     Line prev = lines.get(li - 1);
-    if (ctx.tokenSym[prev.firstToken()] == Sym.AT) {
+    if (ctx.tokens.get(prev.firstToken()).sym() == Sym.AT) {
       return false;
     }
     int prevLastIndex = prev.firstToken() + prev.tokenCount() - 1;
-    Sym prevLast = ctx.tokenSym[prevLastIndex];
+    Sym prevLast = ctx.tokens.get(prevLastIndex).sym();
     if (
       ctx.tokens.get(prevLastIndex).isComment()
         || prevLast == Sym.SEMI
@@ -1669,11 +1669,11 @@ public final class Printer {
       return false;
     }
     Line prev = lines.get(li - 1);
-    Sym prevLast = ctx.tokenSym[prev.firstToken() + prev.tokenCount() - 1];
+    Sym prevLast = ctx.tokens.get(prev.firstToken() + prev.tokenCount() - 1).sym();
     if (prevLast == Sym.LBRACE || prevLast == Sym.LPAREN) {
       return false;
     }
-    Sym first = ctx.tokenSym[lines.get(li).firstToken()];
+    Sym first = ctx.tokens.get(lines.get(li).firstToken()).sym();
     return first != Sym.RBRACE && first != Sym.RPAREN;
   }
 
@@ -1710,8 +1710,8 @@ public final class Printer {
   private boolean spaceBetween(int prevIndex, int nextIndex) {
     Token prev = ctx.tokens.get(prevIndex);
     Token next = ctx.tokens.get(nextIndex);
-    Sym prevSym = ctx.tokenSym[prevIndex];
-    Sym nextSym = ctx.tokenSym[nextIndex];
+    Sym prevSym = ctx.tokens.get(prevIndex).sym();
+    Sym nextSym = ctx.tokens.get(nextIndex).sym();
 
     if (prev.isComment() || next.isComment()) {
       return true;
@@ -1800,7 +1800,7 @@ public final class Printer {
   }
 
   private boolean spaceBeforePrefix(int prevIndex) {
-    Sym prevSym = ctx.tokenSym[prevIndex];
+    Sym prevSym = ctx.tokens.get(prevIndex).sym();
     boolean tightBefore = switch (prevSym) {
       case LPAREN, LBRACKET, BANG, TILDE, AT, DOT, METHOD_REF -> true;
       default -> false;
