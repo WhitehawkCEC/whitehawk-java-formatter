@@ -153,6 +153,7 @@ public final class Printer {
     forceChainBreaks();
     forceConcatBreaks();
     forceLogicalBreaks();
+    forceEnumConstantBreaks();
 
     // Canonical style never breaks before a method declaration's `throws` clause: join it to the
     // signature, or to the isolated `)` closer of a multiline parameter list. Skip when the
@@ -345,6 +346,68 @@ public final class Printer {
 
   private boolean isLogicalOp(int i) {
     return tokenSym[i] == Sym.AMP_AMP || tokenSym[i] == Sym.BAR_BAR;
+  }
+
+  /// Enum constants are siblings: once one constant's argument list is broken across lines, every
+  /// constant's argument list breaks too, so a list is never left with one constant crammed inline
+  /// while its neighbours wrap. Constant bodies and the methods after the list-terminating `;` are
+  /// untouched.
+  private void forceEnumConstantBreaks() {
+    int n = tokens.size();
+    for (int e = 0; e < n; e++) {
+      if (tokenSym[e] != Sym.ENUM) {
+        continue;
+      }
+      int bodyOpen = e + 1;
+      while (bodyOpen < n && tokenSym[bodyOpen] != Sym.LBRACE) {
+        bodyOpen++;
+      }
+      if (bodyOpen >= n || matchClose[bodyOpen] < 0) {
+        continue;
+      }
+      int bodyClose = matchClose[bodyOpen];
+      List<Integer> parens = new ArrayList<>();
+      boolean anyBroken = false;
+      for (int i = bodyOpen + 1; i < bodyClose; i++) {
+        if (tokenSym[i] == Sym.SEMI) {
+          break; // the constant list ends; the methods after it are not siblings
+        }
+        if (!tokenClasses.has(i, Classification.OPENER)) {
+          continue;
+        }
+        int c = matchClose[i];
+        if (c < 0) {
+          break;
+        }
+        if (tokenSym[i] == Sym.LPAREN && isEnumConstantParen(i)) {
+          parens.add(i);
+          anyBroken |= c > i + 1 && breakBefore[i + 1];
+        }
+        i = c; // skip nested content (constant bodies, argument lists)
+      }
+      if (!anyBroken) {
+        continue;
+      }
+      for (int open : parens) {
+        int c = matchClose[open];
+        if (c > open + 1 && !breakBefore[open + 1]) {
+          breakBefore[open + 1] = true;
+          forcedBreak[open + 1] = true;
+          breakBefore[c] = true;
+          forcedBreak[c] = true;
+        }
+      }
+    }
+  }
+
+  /// A `(` opening an enum constant's argument list: preceded by the constant-name identifier and
+  /// not the argument list of an annotation on that constant.
+  private boolean isEnumConstantParen(int open) {
+    int name = indexOfPrevCode(open);
+    if (name < 0 || tokens.get(name).kind() != Kind.IDENT) {
+      return false;
+    }
+    return matchClose[open] >= 0 && !closesAnnotation(matchClose[open]);
   }
 
   private boolean endsOperatorElement(int i) {
