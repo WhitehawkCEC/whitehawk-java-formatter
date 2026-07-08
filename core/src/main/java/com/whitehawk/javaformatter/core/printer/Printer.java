@@ -1173,12 +1173,17 @@ public final class Printer {
       Scope top = stack.peek();
       int firstToken = line.firstToken();
       Sym firstSym = tokenSym[firstToken];
+      // `scopeFor` allocates a stack iterator, so resolve the closer's scope once and reuse it for
+      // both the close indent and the body indent below. `top` is an unused non-null placeholder
+      // when the line does not start with a closer.
+      boolean firstIsCloser = tokenClasses.has(firstToken, Classification.CLOSER);
+      Scope closerScope = firstIsCloser ? scopeFor(stack, firstSym) : top;
       int indent;
       boolean continuation = false;
       if (joinWithPrev != null && joinWithPrev[li]) {
         indent = headIndent;
-      } else if (tokenClasses.has(firstToken, Classification.CLOSER)) {
-        indent = scopeFor(stack, firstSym).closeIndent;
+      } else if (firstIsCloser) {
+        indent = closerScope.closeIndent;
       } else if (top.elementOpen) {
         indent = continuationIndent(top, firstToken, prevIndent);
         continuation = true;
@@ -1193,9 +1198,7 @@ public final class Printer {
       if (joinWithPrev == null || !joinWithPrev[li]) {
         headIndent = indent;
       }
-      int bodyIndent = tokenClasses.has(firstToken, Classification.CLOSER)
-        ? scopeFor(stack, firstSym).contentIndent
-        : indent;
+      int bodyIndent = firstIsCloser ? closerScope.contentIndent : indent;
       // A comment preceding a colon-style case label belongs to the previous case's fallthrough
       // body, so indent it one level deeper than the label. Arrow-style cases don't fall through,
       // so a comment there introduces the next case and aligns with the label.
