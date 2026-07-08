@@ -52,10 +52,6 @@ public final class Printer {
   private final Deque<Scope> analyzeStack = new ArrayDeque<>();
   private final List<Integer> pendingComments = new ArrayList<>();
 
-  public Printer(List<Token> tokens) {
-    this(TokenContext.from(tokens));
-  }
-
   public Printer(TokenContext ctx) {
     this.ctx = ctx;
     int n = ctx.tokens.size();
