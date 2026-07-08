@@ -26,7 +26,6 @@ public final class TokenContext {
   /// -1 for a multiline token (text block, block comment).
   final int[] tokenWidth;
   final ArraySmallEnumSet<Classification> tokenClasses;
-  final Sym[] tokenSym;
   /// `matchClose` at each opener, `matchOpen` at each closer; -1 elsewhere and at unbalanced brackets.
   final int[] matchOpen;
   final int[] matchClose;
@@ -48,7 +47,6 @@ public final class TokenContext {
     this.tokens = b.tokens;
     this.tokenWidth = b.tokenWidth;
     this.tokenClasses = b.tokenClasses;
-    this.tokenSym = b.tokenSym;
     this.matchOpen = b.matchOpen;
     this.matchClose = b.matchClose;
     this.enclosingOpen = b.enclosingOpen;
@@ -102,10 +100,10 @@ public final class TokenContext {
       return false;
     }
     for (int j = indexOfPrevCode(name); j >= 0;) {
-      if (tokenSym[j] == Sym.AT) {
+      if (tokens.get(j).sym() == Sym.AT) {
         return true;
       }
-      if (tokenSym[j] != Sym.DOT) {
+      if (tokens.get(j).sym() != Sym.DOT) {
         return false;
       }
       int qualifier = indexOfPrevCode(j);
@@ -118,11 +116,11 @@ public final class TokenContext {
   }
 
   int angleDepthDelta(int i) {
-    return angleDepthDelta(tokenSym, i);
+    return angleDepthDelta(tokens, i);
   }
 
   int scanTypeArguments(int open) {
-    return scanTypeArguments(tokens, tokenSym, tokenClasses, open);
+    return scanTypeArguments(tokens, tokenClasses, open);
   }
 
   // --- shared helpers: usable both while building (no instance yet) and at runtime ---
@@ -131,8 +129,8 @@ public final class TokenContext {
     return i < 0 ? -1 : index[i];
   }
 
-  private static int angleDepthDelta(Sym[] tokenSym, int i) {
-    return switch (tokenSym[i]) {
+  private static int angleDepthDelta(List<Token> tokens, int i) {
+    return switch (tokens.get(i).sym()) {
       case LT -> 1;
       case GT -> -1;
       case GT_GT -> -2;
@@ -143,7 +141,6 @@ public final class TokenContext {
 
   private static int scanTypeArguments(
     List<Token> tokens,
-    Sym[] tokenSym,
     ArraySmallEnumSet<Classification> tokenClasses,
     int open
   ) {
@@ -153,10 +150,10 @@ public final class TokenContext {
       if (t.isComment()) {
         continue;
       }
-      switch (tokenSym[i]) {
+      switch (t.sym()) {
         case LT -> depth++;
         case GT, GT_GT, GT_GT_GT -> {
-          depth += angleDepthDelta(tokenSym, i);
+          depth += angleDepthDelta(tokens, i);
           if (depth <= 0) {
             return depth == 0 ? i : -1;
           }
@@ -182,7 +179,6 @@ public final class TokenContext {
     private final List<Token> tokens;
     private final int[] tokenWidth;
     private final ArraySmallEnumSet<Classification> tokenClasses;
-    private final Sym[] tokenSym;
     private final int[] matchOpen;
     private final int[] matchClose;
     private final int[] enclosingOpen;
@@ -197,7 +193,6 @@ public final class TokenContext {
       this.tokens = tokens;
       this.tokenWidth = new int[n];
       this.tokenClasses = new ArraySmallEnumSet<>(Classification.class, n);
-      this.tokenSym = new Sym[n];
       this.matchOpen = new int[n];
       this.matchClose = new int[n];
       this.enclosingOpen = new int[n];
@@ -225,7 +220,6 @@ public final class TokenContext {
         tokenWidth[i] = text.indexOf('\n') >= 0 ? -1 : text.length();
         prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
         Classification.classify(tokenClasses, i, t);
-        tokenSym[i] = Sym.of(text);
         prevCodeIndex[i] = lastCode;
         if (!t.isComment()) {
           lastCode = i;
@@ -266,7 +260,7 @@ public final class TokenContext {
     private void linkCallChains() {
       Arrays.fill(callParen, -1);
       for (int p = 0; p < tokens.size(); p++) {
-        if (tokenSym[p] != Sym.DOT) {
+        if (tokens.get(p).sym() != Sym.DOT) {
           continue;
         }
         int name = callName(p);
@@ -274,7 +268,7 @@ public final class TokenContext {
           continue;
         }
         int paren = codeIndex(nextCodeIndex, name);
-        if (paren >= 0 && tokenSym[paren] == Sym.LPAREN) {
+        if (paren >= 0 && tokens.get(paren).sym() == Sym.LPAREN) {
           callDot[p] = true;
           callParen[p] = paren;
         }
@@ -285,8 +279,8 @@ public final class TokenContext {
     /// or -1 when the witness angle brackets don't close.
     private int callName(int dot) {
       int name = codeIndex(nextCodeIndex, dot);
-      if (name >= 0 && tokenSym[name] == Sym.LT) {
-        int witnessEnd = scanTypeArguments(tokens, tokenSym, tokenClasses, name);
+      if (name >= 0 && tokens.get(name).sym() == Sym.LT) {
+        int witnessEnd = scanTypeArguments(tokens, tokenClasses, name);
         name = witnessEnd < 0 ? -1 : codeIndex(nextCodeIndex, witnessEnd);
       }
       return name;
