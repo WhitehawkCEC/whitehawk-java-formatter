@@ -46,6 +46,10 @@ public final class Printer {
   private final int[] tokenWidth;
   private final ArraySmallEnumSet<Classification> tokenClasses;
   private final Sym[] tokenSym;
+  /// Index of the nearest non-comment token before/after each position, or -1. Comment positions
+  /// never change, so these are computed once rather than rescanned on every pass.
+  private final int[] prevCodeIndex;
+  private final int[] nextCodeIndex;
   /// Recomputed only by an [#analyze] pass that added a mark bit; later passes reuse it.
   private final boolean[] spaceBefore;
   /// Allocated once because the pass re-runs every wrap iteration.
@@ -74,10 +78,13 @@ public final class Printer {
     this.tokenWidth = new int[n];
     this.tokenClasses = new ArraySmallEnumSet<>(Classification.class, n);
     this.tokenSym = new Sym[n];
+    this.prevCodeIndex = new int[n];
+    this.nextCodeIndex = new int[n];
     this.spaceBefore = new boolean[n];
     this.openerStack = new int[n];
     this.prefixWidth = new int[n + 1];
     this.prefixMultiline = new int[n + 1];
+    int lastCode = -1;
     for (int i = 0; i < n; i++) {
       Token t = this.tokens.get(i);
       String text = t.text();
@@ -85,6 +92,17 @@ public final class Printer {
       prefixMultiline[i + 1] = prefixMultiline[i] + (tokenWidth[i] < 0 ? 1 : 0);
       Classification.classify(tokenClasses, i, t);
       tokenSym[i] = Sym.of(text);
+      prevCodeIndex[i] = lastCode;
+      if (!t.isComment()) {
+        lastCode = i;
+      }
+    }
+    int nextCode = -1;
+    for (int i = n - 1; i >= 0; i--) {
+      nextCodeIndex[i] = nextCode;
+      if (!this.tokens.get(i).isComment()) {
+        nextCode = i;
+      }
     }
     computeBracketMatches();
     computeBreaks();
@@ -1667,12 +1685,7 @@ public final class Printer {
   }
 
   private int indexOfPrevCode(int i) {
-    for (int j = i - 1; j >= 0; j--) {
-      if (!tokens.get(j).isComment()) {
-        return j;
-      }
-    }
-    return -1;
+    return i < 0 ? -1 : prevCodeIndex[i];
   }
 
   private @Nullable Token nextCode(int i) {
@@ -1681,15 +1694,7 @@ public final class Printer {
   }
 
   private int indexOfNextCode(int i) {
-    if (i < 0) {
-      return -1;
-    }
-    for (int j = i + 1; j < tokens.size(); j++) {
-      if (!tokens.get(j).isComment()) {
-        return j;
-      }
-    }
-    return -1;
+    return i < 0 ? -1 : nextCodeIndex[i];
   }
 
   // ---------------------------------------------------------------------------------------------
