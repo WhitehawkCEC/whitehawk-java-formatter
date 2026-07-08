@@ -1,6 +1,7 @@
 package com.whitehawk.javaformatter.core.printer;
 
 import com.whitehawk.javaformatter.core.Kind;
+import com.whitehawk.javaformatter.core.Sym;
 import com.whitehawk.javaformatter.core.Token;
 
 import org.jspecify.annotations.NullMarked;
@@ -49,26 +50,26 @@ final class TokenPreprocessor {
   /// An expression combined with one of these reads as an operand and gets parenthesized;
   /// assignment, `->`, and the ternary `?`/`:` are excluded so `x = ..`, `case y -> ..`, and
   /// `c ? .. : ..` keep their bare form (as do `return`/`yield`, which aren't operators).
-  private static final Set<String> BINARY_OPERAND_OPERATORS = Set.of(
-    "||",
-    "&&",
-    "|",
-    "&",
-    "^",
-    "==",
-    "!=",
-    "<",
-    ">",
-    "<=",
-    ">=",
-    "+",
-    "-",
-    "*",
-    "/",
-    "%",
-    "<<",
-    ">>",
-    ">>>"
+  private static final Set<Sym> BINARY_OPERAND_OPERATORS = Set.of(
+    Sym.BAR_BAR,
+    Sym.AMP_AMP,
+    Sym.BAR,
+    Sym.AMP,
+    Sym.CARET,
+    Sym.EQ,
+    Sym.NE,
+    Sym.LT,
+    Sym.GT,
+    Sym.LE,
+    Sym.GE,
+    Sym.PLUS,
+    Sym.MINUS,
+    Sym.STAR,
+    Sym.SLASH,
+    Sym.PERCENT,
+    Sym.LT_LT,
+    Sym.GT_GT,
+    Sym.GT_GT_GT
   );
 
   /// Canonical style wraps a `switch` expression used as a binary operand in parens, so it reads as
@@ -78,15 +79,15 @@ final class TokenPreprocessor {
     int[] close = brackets.close(in);
     List<int[]> wraps = new ArrayList<>(); // {switchIndex, bodyCloseInclusive}
     for (int i = 0; i < n; i++) {
-      if (!in.get(i).is("switch")) {
+      if (in.get(i).sym() != Sym.SWITCH) {
         continue;
       }
       int paren = nextCodeIndex(in, i);
-      if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+      if (paren < 0 || in.get(paren).sym() != Sym.LPAREN || close[paren] < 0) {
         continue;
       }
       int brace = nextCodeIndex(in, close[paren]);
-      if (brace < 0 || !in.get(brace).is("{") || close[brace] < 0) {
+      if (brace < 0 || in.get(brace).sym() != Sym.LBRACE || close[brace] < 0) {
         continue;
       }
       if (isBinaryOperand(in, i, close[brace])) {
@@ -101,11 +102,11 @@ final class TokenPreprocessor {
 
   private static boolean isBinaryOperand(List<Token> in, int start, int endInclusive) {
     int prev = prevCodeIndex(in, start);
-    if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).text())) {
+    if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).sym())) {
       return true;
     }
     int next = nextCodeIndex(in, endInclusive);
-    return next >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(next).text());
+    return next >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(next).sym());
   }
 
   /// Canonical style wraps a multiline method chain used as a binary operand in parens, so the
@@ -160,7 +161,7 @@ final class TokenPreprocessor {
       }
       int chainStart = chainReceiverStart(in, open, p);
       int prev = prevCodeIndex(in, chainStart);
-      if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).text())) {
+      if (prev >= 0 && BINARY_OPERAND_OPERATORS.contains(in.get(prev).sym())) {
         wraps.add(new int[] { chainStart, chainEnd });
       }
     }
@@ -171,7 +172,7 @@ final class TokenPreprocessor {
   }
 
   private static boolean isCallDot(List<Token> in, int[] close, int p) {
-    if (!in.get(p).is(".")) {
+    if (in.get(p).sym() != Sym.DOT) {
       return false;
     }
     int name = nextCodeIndex(in, p);
@@ -179,7 +180,7 @@ final class TokenPreprocessor {
       return false;
     }
     int paren = nextCodeIndex(in, name);
-    return paren >= 0 && in.get(paren).is("(") && close[paren] >= 0;
+    return paren >= 0 && in.get(paren).sym() == Sym.LPAREN && close[paren] >= 0;
   }
 
   /// Walks back from a chain's head `.call` over its receiver — a run of identifiers, `.`, matched
@@ -189,21 +190,21 @@ final class TokenPreprocessor {
     int start = headDot;
     for (int r = prevCodeIndex(in, headDot); r >= 0; r = prevCodeIndex(in, r)) {
       Token t = in.get(r);
-      if (t.is(")") || t.is("]")) {
+      if (t.sym() == Sym.RPAREN || t.sym() == Sym.RBRACKET) {
         if (open[r] < 0) {
           break;
         }
         start = open[r];
         r = open[r];
-      } else if (t.is(">") || t.is(">>") || t.is(">>>")) {
+      } else if (t.sym() == Sym.GT || t.sym() == Sym.GT_GT || t.sym() == Sym.GT_GT_GT) {
         int lt = typeWitnessOpen(in, r);
         int dot = lt < 0 ? -1 : prevCodeIndex(in, lt);
-        if (dot < 0 || !in.get(dot).is(".")) {
+        if (dot < 0 || in.get(dot).sym() != Sym.DOT) {
           break;
         }
         start = dot;
         r = dot;
-      } else if (t.kind() == Kind.IDENT || t.is(".")) {
+      } else if (t.kind() == Kind.IDENT || t.sym() == Sym.DOT) {
         start = r;
       } else {
         break;
@@ -218,13 +219,13 @@ final class TokenPreprocessor {
     int depth = 0;
     for (int j = gt; j >= 0; j = prevCodeIndex(in, j)) {
       Token t = in.get(j);
-      if (t.is(">")) {
+      if (t.sym() == Sym.GT) {
         depth++;
-      } else if (t.is(">>")) {
+      } else if (t.sym() == Sym.GT_GT) {
         depth += 2;
-      } else if (t.is(">>>")) {
+      } else if (t.sym() == Sym.GT_GT_GT) {
         depth += 3;
-      } else if (t.is("<")) {
+      } else if (t.sym() == Sym.LT) {
         if (--depth == 0) {
           return j;
         }
@@ -238,8 +239,8 @@ final class TokenPreprocessor {
   /// The brackets and separators a type-argument list never contains, so reaching one means the
   /// `>` did not close a witness.
   private static boolean isTypeArgBoundary(Token t) {
-    return switch (t.text()) {
-      case "(", ")", "{", "}", ";", "=" -> true;
+    return switch (t.sym()) {
+      case LPAREN, RPAREN, LBRACE, RBRACE, SEMI, ASSIGN -> true;
       default -> false;
     };
   }
@@ -292,11 +293,11 @@ final class TokenPreprocessor {
     Set<Integer> appendSemiAfter = new HashSet<>(); // append `;` after this comma
     Set<Integer> insertCommaBefore = new HashSet<>(); // insert `,` before this `;`
     for (int i = 0; i < n; i++) {
-      if (!in.get(i).is("enum")) {
+      if (in.get(i).sym() != Sym.ENUM) {
         continue;
       }
       int bodyOpen = i + 1;
-      while (bodyOpen < n && !in.get(bodyOpen).is("{")) {
+      while (bodyOpen < n && in.get(bodyOpen).sym() != Sym.LBRACE) {
         bodyOpen++;
       }
       if (bodyOpen >= n || close[bodyOpen] < 0) {
@@ -305,13 +306,13 @@ final class TokenPreprocessor {
       int semi = firstTopLevelSemicolon(in, close, bodyOpen);
       if (semi < 0) {
         int last = prevCodeIndex(in, close[bodyOpen]);
-        if (last > bodyOpen && in.get(last).is(",")) {
+        if (last > bodyOpen && in.get(last).sym() == Sym.COMMA) {
           appendSemiAfter.add(last);
         }
         continue;
       }
       int prev = prevCodeIndex(in, semi);
-      if (prev > bodyOpen && !in.get(prev).is(",")) {
+      if (prev > bodyOpen && in.get(prev).sym() != Sym.COMMA) {
         insertCommaBefore.add(semi);
       }
     }
@@ -339,14 +340,14 @@ final class TokenPreprocessor {
     int end = close[bodyOpen];
     for (int i = bodyOpen + 1; i < end; i++) {
       Token t = in.get(i);
-      if (t.is("{") || t.is("(") || t.is("[")) {
+      if (t.sym() == Sym.LBRACE || t.sym() == Sym.LPAREN || t.sym() == Sym.LBRACKET) {
         if (close[i] < 0) {
           return -1;
         }
         i = close[i];
         continue;
       }
-      if (t.is(";")) {
+      if (t.sym() == Sym.SEMI) {
         return i;
       }
     }
@@ -361,11 +362,11 @@ final class TokenPreprocessor {
     int n = in.size();
     List<int[]> imports = new ArrayList<>(); // {importIndex, semicolonIndex}
     for (int i = 0; i < n; i++) {
-      if (!in.get(i).is("import")) {
+      if (in.get(i).sym() != Sym.IMPORT) {
         continue;
       }
       int semi = i;
-      while (semi < n && !in.get(semi).is(";")) {
+      while (semi < n && in.get(semi).sym() != Sym.SEMI) {
         semi++;
       }
       if (semi < n) {
@@ -384,7 +385,7 @@ final class TokenPreprocessor {
     Set<String> tracked = new HashSet<>();
     for (int k = 0; k < imports.size(); k++) {
       int[] range = imports.get(k);
-      if (in.get(range[1] - 1).is("*")) {
+      if (in.get(range[1] - 1).sym() == Sym.STAR) {
         continue;
       }
       for (int i = range[1] - 1; i > range[0]; i--) {
@@ -479,14 +480,14 @@ final class TokenPreprocessor {
     boolean any = false;
     int[] parenOpen = null;
     for (int a = 0; a < n; a++) {
-      if (!in.get(a).is("->")) {
+      if (in.get(a).sym() != Sym.ARROW) {
         continue;
       }
       int prev = prevCodeIndex(in, a);
       if (prev < 0) {
         continue;
       }
-      if (in.get(prev).is(")")) {
+      if (in.get(prev).sym() == Sym.RPAREN) {
         if (parenOpen == null) {
           parenOpen = matchOpenParens(in);
         }
@@ -535,7 +536,7 @@ final class TokenPreprocessor {
       return false;
     }
     int arrow = nextCodeIndex(in, i);
-    if (arrow < 0 || !in.get(arrow).is("->")) {
+    if (arrow < 0 || in.get(arrow).sym() != Sym.ARROW) {
       return false;
     }
     // Walk back over a label/qualifier list, including generic and array type tokens so a type
@@ -543,7 +544,7 @@ final class TokenPreprocessor {
     // arrow, not a lambda.
     for (int j = prevCodeIndex(in, i); j >= 0; j = prevCodeIndex(in, j)) {
       Token p = in.get(j);
-      if (p.is("case")) {
+      if (p.sym() == Sym.CASE) {
         return false;
       }
       if (!isLabelPart(p)) {
@@ -556,8 +557,9 @@ final class TokenPreprocessor {
   /// A token that continues a lambda parameter's label/qualifier list: a bare name, or the
   /// punctuation and keywords a generic or array type pattern can carry.
   private static boolean isLabelPart(Token t) {
-    return switch (t.text()) {
-      case ".", ",", "<", ">", ">>", ">>>", "?", "&", "[", "]", "extends", "super" -> true;
+    return switch (t.sym()) {
+      case DOT, COMMA, LT, GT, GT_GT, GT_GT_GT, QUESTION, AMP, LBRACKET, RBRACKET, EXTENDS,
+          SUPER -> true;
       default -> t.kind() == Kind.IDENT && !t.isKeyword();
     };
   }
@@ -571,7 +573,7 @@ final class TokenPreprocessor {
       if (t.isComment()) {
         continue;
       }
-      if (t.is(",")) {
+      if (t.sym() == Sym.COMMA) {
         if (elementTokens != 1) {
           return null;
         }
@@ -600,9 +602,9 @@ final class TokenPreprocessor {
     int depth = 0;
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
-      if (t.is("(")) {
+      if (t.sym() == Sym.LPAREN) {
         stack[depth++] = i;
-      } else if (t.is(")") && depth > 0) {
+      } else if (t.sym() == Sym.RPAREN && depth > 0) {
         open[i] = stack[--depth];
       }
     }
@@ -635,17 +637,17 @@ final class TokenPreprocessor {
     for (int i = 0; i < n; i++) {
       Token t = in.get(i);
       int bodyStart;
-      if (t.is("if") || t.is("while") || t.is("for")) {
+      if (t.sym() == Sym.IF || t.sym() == Sym.WHILE || t.sym() == Sym.FOR) {
         int paren = nextCodeIndex(in, i);
-        if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+        if (paren < 0 || in.get(paren).sym() != Sym.LPAREN || close[paren] < 0) {
           continue;
         }
         bodyStart = nextCodeIndex(in, close[paren]);
-      } else if (t.is("do")) {
+      } else if (t.sym() == Sym.DO) {
         bodyStart = nextCodeIndex(in, i);
-      } else if (t.is("else")) {
+      } else if (t.sym() == Sym.ELSE) {
         bodyStart = nextCodeIndex(in, i);
-        if (bodyStart >= 0 && in.get(bodyStart).is("if")) {
+        if (bodyStart >= 0 && in.get(bodyStart).sym() == Sym.IF) {
           continue; // else-if chain keeps its unbraced `if`
         }
       } else {
@@ -655,7 +657,7 @@ final class TokenPreprocessor {
         continue;
       }
       Token body = in.get(bodyStart);
-      if (body.is("{") || body.is(";")) {
+      if (body.sym() == Sym.LBRACE || body.sym() == Sym.SEMI) {
         continue; // already a block or an empty statement
       }
       int bodyEnd = statementEnd(in, close, bodyStart);
@@ -705,15 +707,15 @@ final class TokenPreprocessor {
 
   private static int statementEnd(List<Token> in, int[] close, int start) {
     Token t = in.get(start);
-    if (t.is("{")) {
+    if (t.sym() == Sym.LBRACE) {
       return close[start] < 0 ? scanToSemicolon(in, close, start) : close[start];
     }
-    if (t.is(";")) {
+    if (t.sym() == Sym.SEMI) {
       return start;
     }
     if (isParenControlFlow(t)) {
       int paren = nextCodeIndex(in, start);
-      if (paren < 0 || !in.get(paren).is("(") || close[paren] < 0) {
+      if (paren < 0 || in.get(paren).sym() != Sym.LPAREN || close[paren] < 0) {
         return scanToSemicolon(in, close, start);
       }
       int body = nextCodeIndex(in, close[paren]);
@@ -721,9 +723,9 @@ final class TokenPreprocessor {
         return close[paren];
       }
       int end = statementEnd(in, close, body);
-      if (t.is("if")) {
+      if (t.sym() == Sym.IF) {
         int els = nextCodeIndex(in, end);
-        if (els >= 0 && in.get(els).is("else")) {
+        if (els >= 0 && in.get(els).sym() == Sym.ELSE) {
           int elseBody = nextCodeIndex(in, els);
           if (elseBody >= 0) {
             end = statementEnd(in, close, elseBody);
@@ -732,18 +734,18 @@ final class TokenPreprocessor {
       }
       return end;
     }
-    if (t.is("do")) {
+    if (t.sym() == Sym.DO) {
       int body = nextCodeIndex(in, start);
       if (body < 0) {
         return start;
       }
       int end = statementEnd(in, close, body);
       int wh = nextCodeIndex(in, end);
-      if (wh >= 0 && in.get(wh).is("while")) {
+      if (wh >= 0 && in.get(wh).sym() == Sym.WHILE) {
         int paren = nextCodeIndex(in, wh);
-        if (paren >= 0 && in.get(paren).is("(") && close[paren] >= 0) {
+        if (paren >= 0 && in.get(paren).sym() == Sym.LPAREN && close[paren] >= 0) {
           int semi = nextCodeIndex(in, close[paren]);
-          return semi >= 0 && in.get(semi).is(";") ? semi : close[paren];
+          return semi >= 0 && in.get(semi).sym() == Sym.SEMI ? semi : close[paren];
         }
       }
       return end;
@@ -753,8 +755,8 @@ final class TokenPreprocessor {
 
   /// Control-flow keywords whose body follows a parenthesized clause (`if (..) ..`).
   private static boolean isParenControlFlow(Token t) {
-    return switch (t.text()) {
-      case "if", "while", "for", "switch", "synchronized" -> true;
+    return switch (t.sym()) {
+      case IF, WHILE, FOR, SWITCH, SYNCHRONIZED -> true;
       default -> false;
     };
   }
@@ -762,9 +764,9 @@ final class TokenPreprocessor {
   private static int scanToSemicolon(List<Token> in, int[] close, int from) {
     for (int j = from; j < in.size(); j++) {
       Token t = in.get(j);
-      if ((t.is("(") || t.is("[") || t.is("{")) && close[j] > j) {
+      if ((t.sym() == Sym.LPAREN || t.sym() == Sym.LBRACKET || t.sym() == Sym.LBRACE) && close[j] > j) {
         j = close[j];
-      } else if (t.is(";")) {
+      } else if (t.sym() == Sym.SEMI) {
         return j;
       }
     }
