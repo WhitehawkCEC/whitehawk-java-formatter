@@ -2,6 +2,7 @@ package com.whitehawk.javaformatter.core.printer;
 
 import com.whitehawk.javaformatter.core.ArraySmallEnumSet;
 import com.whitehawk.javaformatter.core.Kind;
+import com.whitehawk.javaformatter.core.Sym;
 import com.whitehawk.javaformatter.core.Token;
 
 import org.jspecify.annotations.NullMarked;
