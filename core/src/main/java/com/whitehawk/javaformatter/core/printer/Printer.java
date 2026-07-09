@@ -12,7 +12,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /// Renders a token stream back to source under a canonical style. Line breaks largely follow
 /// what the input already did — a bracket group the input split stays split, one it kept together
@@ -1142,17 +1144,18 @@ public final class Printer {
 
   /// Falls back to the innermost scope of the matching kind on unbalanced input.
   private static Scope scopeFor(Deque<Scope> stack, Sym closer) {
-    char kind = closer == Sym.RBRACE ? '{' : closer == Sym.RPAREN ? '(' : '[';
+    Set<Scope.Kind> expected = switch (closer) {
+      case Sym.RBRACE -> EnumSet.of(
+        Scope.Kind.BLOCK,
+        Scope.Kind.SWITCH_BODY,
+        Scope.Kind.ENUM_BODY,
+        Scope.Kind.ARRAY_INIT
+      );
+      case Sym.RPAREN -> EnumSet.of(Scope.Kind.PAREN);
+      default -> EnumSet.of(Scope.Kind.BRACKET);
+    };
     for (Scope s : stack) {
-      boolean matches = switch (kind) {
-        case '{' -> s.kind == Scope.Kind.BLOCK
-          || s.kind == Scope.Kind.SWITCH_BODY
-          || s.kind == Scope.Kind.ENUM_BODY
-          || s.kind == Scope.Kind.ARRAY_INIT;
-        case '(' -> s.kind == Scope.Kind.PAREN;
-        default -> s.kind == Scope.Kind.BRACKET;
-      };
-      if (matches) {
+      if (expected.contains(s.kind)) {
         return s;
       }
     }
