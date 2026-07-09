@@ -1173,22 +1173,21 @@ public final class Printer {
         top.elementOpen = true;
         top.elementStartIndent = indent;
         top.caseLabel = top.kind == Scope.Kind.SWITCH_BODY
-          && (ctx.tokens.get(i).sym() == Sym.CASE || ctx.tokens.get(i).sym() == Sym.DEFAULT);
+          && (t.sym() == Sym.CASE || t.sym() == Sym.DEFAULT);
       }
       // A `switch` on a wrapped continuation line sits past its line's indent; measure its column
       // so its body indents from the keyword rather than from the continuation indent.
       int column = continuation
         ? indent + runWidth(line.firstToken(), i) + (spaceBefore[i] ? 1 : 0)
         : indent;
-      analyzeToken(stack, i, indent, column);
+      analyzeToken(stack, top, i, indent, column);
     }
     endOfLine(stack, line);
   }
 
-  private void analyzeToken(Deque<Scope> stack, int i, int indent, int column) {
+  private void analyzeToken(Deque<Scope> stack, Scope top, int i, int indent, int column) {
     Token t = ctx.tokens.get(i);
-    Scope top = stack.peek();
-    Sym sym = ctx.tokens.get(i).sym();
+    Sym sym = t.sym();
     updateAnnotationState(top, t, sym);
 
     switch (sym) {
@@ -1201,7 +1200,8 @@ public final class Printer {
           contentIndent += INDENT;
         }
         Scope scope = newScope(Scope.Kind.PAREN, contentIndent, indent);
-        scope.forParen = prev >= 0 && (ctx.tokens.get(prev).sym() == Sym.FOR || ctx.tokens.get(prev).sym() == Sym.TRY);
+        Sym prevSym = prev >= 0 ? ctx.tokens.get(prev).sym() : Sym.OTHER;
+        scope.forParen = prevSym == Sym.FOR || prevSym == Sym.TRY;
         stack.push(scope);
       }
       case LBRACKET -> stack.push(newScope(Scope.Kind.BRACKET, indent + INDENT, indent));
@@ -1436,8 +1436,8 @@ public final class Printer {
       if (
         before.kind() == Kind.IDENT
           && !ctx.tokenClasses.has(beforeOpen, Classification.KEYWORD)
-          || ctx.tokens.get(beforeOpen).sym() == Sym.RPAREN
-          || ctx.tokens.get(beforeOpen).sym() == Sym.RBRACKET
+          || before.sym() == Sym.RPAREN
+          || before.sym() == Sym.RBRACKET
       ) {
         return false;
       }
@@ -1447,7 +1447,7 @@ public final class Printer {
       return false;
     }
     Token next = ctx.tokens.get(nextIndex);
-    return switch (ctx.tokens.get(nextIndex).sym()) {
+    return switch (next.sym()) {
       case PLUS, MINUS, INCREMENT, DECREMENT -> paren.sawPrimitive;
       case LPAREN, BANG, TILDE, THIS, SUPER, NEW -> true;
       default -> next.kind() != Kind.PUNCT
@@ -1465,7 +1465,7 @@ public final class Printer {
     if (isLiteral(prev)) {
       return false;
     }
-    Sym prevSym = ctx.tokens.get(prevIndex).sym();
+    Sym prevSym = prev.sym();
     if (prev.kind() == Kind.IDENT) {
       return ctx.tokenClasses.has(prevIndex, Classification.KEYWORD) && switch (prevSym) {
         case THIS, SUPER, TRUE, FALSE, NULL -> false;
