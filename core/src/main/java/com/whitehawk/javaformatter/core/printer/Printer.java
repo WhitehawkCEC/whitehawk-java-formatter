@@ -1713,8 +1713,8 @@ public final class Printer {
   private boolean spaceBetween(int prevIndex, int nextIndex) {
     Token prev = ctx.tokens.get(prevIndex);
     Token next = ctx.tokens.get(nextIndex);
-    Sym prevSym = ctx.tokens.get(prevIndex).sym();
-    Sym nextSym = ctx.tokens.get(nextIndex).sym();
+    Sym prevSym = prev.sym();
+    Sym nextSym = next.sym();
 
     if (prev.isComment() || next.isComment()) {
       return true;
