@@ -9,3 +9,7 @@ node = "lts"
 [tasks.format-java]
 description = "Format the repo's Java sources in place"
 run = "./mvnw -q -pl app-cli -am -Pformat-java process-classes"
+
+[tasks.build-native]
+description = "Build graalvm executable"
+run = "./mvnw -Pnative package"
