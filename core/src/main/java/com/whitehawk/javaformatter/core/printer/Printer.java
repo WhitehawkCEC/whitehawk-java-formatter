@@ -869,9 +869,11 @@ public final class Printer {
         // multi-argument call, keeps its break
       }
       int li = lineIndexOf(dot);
-      // Blocked by a multiline token, or a brace group that keeps its own lines.
+      // Blocked by a multiline token, a brace group that keeps its own lines, or a line comment
+      // that would swallow every token joined onto its line.
       boolean blocked = ctx.prefixMultiline[close + 1] > ctx.prefixMultiline[dot]
-        || hasBraceInside(open, close);
+        || hasBraceInside(open, close)
+        || hasLineCommentInside(open, close);
       if (blocked || lineIndent[li] + runWidth(dot, close + 1) > MAX_WIDTH) {
         continue;
       }
@@ -889,6 +891,15 @@ public final class Printer {
   private boolean hasBraceInside(int open, int close) {
     for (int i = open + 1; i < close; i++) {
       if (ctx.tokens.get(i).sym() == Sym.LBRACE) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean hasLineCommentInside(int open, int close) {
+    for (int i = open + 1; i < close; i++) {
+      if (ctx.tokens.get(i).kind() == Kind.LINE_COMMENT) {
         return true;
       }
     }
