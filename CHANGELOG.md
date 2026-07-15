@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.4.0](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.4...0.4.0) (2026-07-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** construct a Printer with `new Printer(TokenContext.from(tokens))`
+instead of `new Printer(tokens)`.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+### Features
+
+* **core:** add compound-assignment symbols to Sym ([cb81f92](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/cb81f92540b86063b81db9b609a0776475b89c61))
+* **core:** add modifier and keyword symbols to Sym ([53774c5](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/53774c5e8e7bcb0a5682ae9c6140170eee1c1993))
+* **core:** add primitive-type symbols to Sym ([78944c4](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/78944c4d3632a223d8c5e9dc9e45f26fe7929a0a))
+* **core:** add Printer(TokenContext) constructor ([3258ea3](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/3258ea3a80e64e7e3d57c90bb591dca0aa394607))
+* **core:** add public Sym enum in core ([196e6bb](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/196e6bbbec0ad76d7acb7b657db8ad4656a300f0))
+* **core:** add Token.of factory ([676b07c](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/676b07cc18151e45a95be41903656ff5fa8c2b74))
+* **core:** build the printer's TokenContext in Formatter ([447bc45](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/447bc45020139bcb6ab9b527c13bd5625810d953))
+* **core:** build the printer's TokenContext in the benchmark ([5a47629](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/5a476293751a44147626a350e73c6f70d849c3fa))
+* **core:** build tokens via Token.of in the lexer ([0a0110b](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/0a0110b7d05a55a91c4b566c94e67f1bfab731a8))
+* **core:** build tokens via Token.of in TokenPreprocessor ([fbed3aa](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/fbed3aa094f8f71898dbdf8646431ea50fcf5bc9))
+* **core:** expand Sym to cover every dispatched symbol ([2c09a96](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/2c09a964f1d7902a07840849b9b514389d2ad66b))
+* **core:** prefer `EnumSet` ([ad17565](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ad1756582c4c2170a45ea90e8066ff5e9cc72122))
+* **core:** remove Printer(List<Token>) constructor ([a523b83](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/a523b8305d83db9175ab2308b0efd27c38e25b5b))
+
+
+### Bug Fixes
+
+* **core:** don't collapse chain-call args containing a line comment ([1b01979](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/1b019795c8ff56f6e328a6c9b120efc95a75c5e7))
+
 ## [0.3.4](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.3...0.3.4) (2026-07-08)
 
 
