@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.4.1](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.4.0...0.4.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **core:** don't break before a type declaration's extends/implements ([0f619b1](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/0f619b1532e27724e170be8592b024ce6326fbae))
+
 ## [0.4.0](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.3.4...0.4.0) (2026-07-15)
 
 
