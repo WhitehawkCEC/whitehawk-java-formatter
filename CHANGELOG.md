@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.4.2](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.4.1...0.4.2) (2026-07-28)
+
+
+### Bug Fixes
+
+* **core:** collapse a wrapped type-argument list onto one line ([ca22210](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/ca2221002957f3a2e68eee32979dab2612e6263f))
+
 ## [0.4.1](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.4.0...0.4.1) (2026-07-16)
 
 
