@@ -474,6 +474,12 @@ public final class Printer {
 
   public String print() {
     analyze(null);
+    // A break inside a type-argument list is never canonical: the list rejoins onto one line
+    // before wrapping, so a too-long result re-wraps at the statement's own structure instead.
+    if (collapseTypeArguments()) {
+      rebuildLines();
+      analyze(null);
+    }
     // A soft break directly after `=` is never canonical: move it into the right-hand side before
     // wrapping, so the side re-breaks at its own structure.
     if (moveAssignmentBreaks()) {
@@ -879,6 +885,33 @@ public final class Printer {
         || hasBraceInside(open, close)
         || hasLineCommentInside(open, close);
       if (blocked || lineIndent[li] + runWidth(dot, close + 1) > MAX_WIDTH) {
+        continue;
+      }
+      for (int i = open + 1; i <= close; i++) {
+        if (breakBefore[i]) {
+          breakBefore[i] = false;
+          forcedBreak[i] = false;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /// Rejoins a type-argument list the input wrapped (`Fields5<\n  A,\n  B> X` becomes
+  /// `Fields5<A, B> X`); a list holding a line comment or a multiline token keeps its lines.
+  private boolean collapseTypeArguments() {
+    boolean changed = false;
+    for (int open = 0; open < ctx.tokens.size(); open++) {
+      if (ctx.tokens.get(open).sym() != Sym.LT || !marks.has(open, Mark.GENERIC_ANGLE)) {
+        continue;
+      }
+      int close = ctx.scanTypeArguments(open);
+      if (
+        close < 0
+          || ctx.prefixMultiline[close + 1] > ctx.prefixMultiline[open]
+          || hasLineCommentInside(open, close)
+      ) {
         continue;
       }
       for (int i = open + 1; i <= close; i++) {
