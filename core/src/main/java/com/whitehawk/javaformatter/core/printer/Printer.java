@@ -153,7 +153,7 @@ public final class Printer {
       for (int c = p; c >= 0; c = nextCall[c]) {
         chain.add(c);
       }
-      if (chain.size() < 2) {
+      if (chain.size() < 2 && !hasConstructorReceiver(p)) {
         continue;
       }
       int last = chain.get(chain.size() - 1);
@@ -165,6 +165,40 @@ public final class Printer {
         }
       }
     }
+  }
+
+  /// Whether the call dot's receiver is a constructor invocation `new X(...)`: the constructor
+  /// counts as the chain's first link, so a lone `.call(` after it still breaks before its dot.
+  /// Runs before any analyze pass, so type arguments (`new X<T>(...)`) are counted structurally
+  /// rather than via [Mark#GENERIC_ANGLE].
+  private boolean hasConstructorReceiver(int dot) {
+    int close = ctx.indexOfPrevCode(dot);
+    if (close < 0 || ctx.tokens.get(close).sym() != Sym.RPAREN) {
+      return false;
+    }
+    int open = ctx.matchOpen[close];
+    if (open < 0) {
+      return false;
+    }
+    int angle = 0;
+    for (int j = ctx.indexOfPrevCode(open); j >= 0; j = ctx.indexOfPrevCode(j)) {
+      int delta = ctx.angleDepthDelta(j);
+      if (delta != 0 || angle > 0) {
+        angle -= delta;
+        if (angle < 0) {
+          return false; // a stray `<` before the class name: not type arguments
+        }
+        continue;
+      }
+      Sym sym = ctx.tokens.get(j).sym();
+      if (sym == Sym.NEW) {
+        return true;
+      }
+      if (sym != Sym.DOT && ctx.tokens.get(j).kind() != Kind.IDENT) {
+        return false; // past the (possibly qualified) class name without meeting `new`
+      }
+    }
+    return false;
   }
 
   /// Keeps an already-broken string-concatenation `+`, so a piecewise-built literal (e.g. a regex
