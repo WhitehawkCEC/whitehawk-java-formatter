@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.4.3](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.4.2...0.4.3) (2026-07-29)
+
+
+### Bug Fixes
+
+* **core:** break before a lone call's dot when its receiver is a constructor ([72a2e4a](https://github.com/whitehawkcec/whitehawk-java-formatter/commit/72a2e4a26c1eda68310785e1eba0636cc2acec2d))
+
 ## [0.4.2](https://github.com/whitehawkcec/whitehawk-java-formatter/compare/0.4.1...0.4.2) (2026-07-28)
 
 
